@@ -91,6 +91,13 @@ struct Args {
         global = true
     )]
     signup_cost: u64,
+    #[arg(
+        long,
+        value_name = "EXPECTED_MIN_DIFFICULTY",
+        help = "The min difficulty expected from miner's submissions.",
+        default_value = "18"
+    )]
+    pub expected_min_difficulty: u32,
 }
 
 
@@ -110,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wallet_path_str = std::env::var("WALLET_PATH").expect("WALLET_PATH must be set.");
     let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set.");
     let password = std::env::var("PASSWORD").expect("PASSWORD must be set.");
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set.");
+    // let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set.");
 
     let manager = Manager::new(
         database_url,
@@ -152,6 +159,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let priority_fee = Arc::new(Mutex::new(args.priority_fee));
+
+    let min_difficulty = args.expected_min_difficulty; // MI
 
     // load wallet
     let wallet_path = Path::new(&wallet_path_str);
@@ -1021,9 +1030,12 @@ async fn client_message_handler_system(
                 if solution.is_valid(&challenge) {
                     let diff = solution.to_hash().difficulty();
                     println!("{} found diff: {}", pubkey_str, diff);
-                    if diff >= MIN_DIFF {
+                    // if diff >= MIN_DIFF {
+                    if diff >= min_difficulty {
                         // calculate rewards
+                        // MI
                         let hashpower = MIN_HASHPOWER * 2u64.pow(diff - MIN_DIFF);
+                        // let hashpower = MIN_HASHPOWER * 2u64.pow(diff - min_difficulty);
                         {
                             let mut epoch_hashes = epoch_hashes.write().await;
                             epoch_hashes.submissions.insert(pubkey, (diff, hashpower));
@@ -1034,7 +1046,7 @@ async fn client_message_handler_system(
                         }
 
                     } else {
-                        println!("Diff to low, skipping");
+                        println!("Diff too low, skipping");
                     }
                 } else {
                     println!("{} returned an invalid solution!", pubkey);
