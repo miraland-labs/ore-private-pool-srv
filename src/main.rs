@@ -117,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wallet_path_str = std::env::var("WALLET_PATH").expect("WALLET_PATH must be set.");
     let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set.");
     let password = std::env::var("PASSWORD").expect("PASSWORD must be set.");
-    // let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set.");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set.");
 
     let manager = Manager::new(
         database_url,
@@ -252,7 +252,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_proof = proof_ext.clone();
     let app_epoch_hashes = epoch_hashes.clone();
     tokio::spawn(async move {
-        client_message_handler_system(client_message_receiver, &app_shared_state, app_ready_clients, app_proof, app_epoch_hashes).await;
+        client_message_handler_system(client_message_receiver, &app_shared_state, app_ready_clients, app_proof, app_epoch_hashes, min_difficulty).await;
     });
 
     // Handle ready clients
@@ -996,7 +996,8 @@ async fn client_message_handler_system(
     shared_state: &Arc<RwLock<AppState>>,
     ready_clients: Arc<Mutex<HashSet<SocketAddr>>>,
     proof: Arc<Mutex<Proof>>,
-    epoch_hashes: Arc<RwLock<EpochHashes>>
+    epoch_hashes: Arc<RwLock<EpochHashes>>,
+    min_difficulty: u32
 ) {
     while let Some(client_message) = receiver_channel.recv().await {
         match client_message {
