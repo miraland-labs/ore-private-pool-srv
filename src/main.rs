@@ -383,11 +383,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         bus = best_bus;
 
-                        let time_until_reset = (config.last_reset_at + 60) - now as i64;
-                        if time_until_reset <= 5 {
-                            let reset_ix = get_reset_ix(signer.pubkey());
-                            ixs.push(reset_ix);
-                        }
+                        // MI: meaningless here
+                        // let time_until_reset = (config.last_reset_at + 60) - now as i64;
+                        // if time_until_reset <= 5 {
+                        //     let reset_ix = get_reset_ix(signer.pubkey());
+                        //     ixs.push(reset_ix);
+                        // }
                     }
 
                     let difficulty = solution.to_hash().difficulty();
@@ -483,7 +484,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             tokio::time::sleep(Duration::from_millis(500)).await;
                         } else {
                             error!("Failed to get latest blockhash. retrying...");
-                            tokio::time::sleep(Duration::from_millis(1000)).await;
+                            tokio::time::sleep(Duration::from_millis(500)).await; // MI: vanilla 1000
                         }
                     } 
                 }
