@@ -553,8 +553,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 } else {
-                    // MI
-                    info!("No satisfied solution received for this round.");
+                    // No solution received yet.
                 }
             } else {
                 tokio::time::sleep(Duration::from_secs(cutoff as u64)).await;
