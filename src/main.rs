@@ -463,7 +463,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             } else {
                                 // sent error
                                 if i >= 7 {
-                                    info!("Failed to send after 3 attempts. Discarding and refreshing data.");
+                                    info!("Failed to send after 7 attempts. Discarding and refreshing data.");
                                     // reset nonce
                                     {
                                         let mut nonce = app_nonce.lock().await;
