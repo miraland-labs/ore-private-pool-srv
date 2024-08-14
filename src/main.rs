@@ -23,7 +23,13 @@ use axum::{
 };
 use axum_extra::{headers::authorization::Basic, TypedHeader};
 use base64::{prelude::BASE64_STANDARD, Engine};
-use clap::Parser;
+use clap::{
+	builder::{
+		styling::{AnsiColor, Effects},
+		Styles,
+	},
+	command, Parser, Subcommand,
+};
 use deadpool_diesel::mysql::{Manager, Pool};
 use diesel::{
     query_dsl::methods::FilterDsl,
@@ -112,7 +118,7 @@ pub struct DifficultyPayload {
 }
 
 #[derive(Parser, Debug)]
-#[command(version, author, about, long_about = None)]
+#[command(version, author, about, long_about = None, styles = styles())]
 struct Args {
     #[arg(
         long,
@@ -192,7 +198,7 @@ struct Args {
         long,
         short,
         value_name = "EXTRA_FEE_PERCENT",
-        help = "The extra percentage that the miner thinks deserves to pay more priority fee. Integer range 0..100 inclusive and the final priority fee cannot exceed the priority fee cap.",
+        help = "The extra percentage that the miner feels deserves to pay more of the priority fee. A positive integer in the range 0..100 [inclusive] is preferred (although integer > 100 is possible, but not recommended), and the final priority fee cannot exceed the priority fee cap.",
         default_value = "0"
     )]
     pub extra_fee_percent: u64,
@@ -210,6 +216,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    color_eyre::install().unwrap();
     dotenv::dotenv().ok();
     let args = Args::parse();
     tracing_subscriber::registry()
@@ -1327,4 +1334,12 @@ async fn ping_check_system(shared_state: &Arc<RwLock<AppState>>) {
 
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
+}
+
+fn styles() -> Styles {
+	Styles::styled()
+		.header(AnsiColor::Red.on_default() | Effects::BOLD)
+		.usage(AnsiColor::Red.on_default() | Effects::BOLD)
+		.literal(AnsiColor::Blue.on_default() | Effects::BOLD)
+		.placeholder(AnsiColor::Green.on_default())
 }
