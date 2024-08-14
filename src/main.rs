@@ -106,20 +106,13 @@ mod ore_utils;
 struct Args {
     #[arg(
         long,
-        value_name = "priority fee",
-        help = "Number of microlamports to pay as priority fee per transaction",
-        default_value = "0",
-        global = true
-    )]
-    priority_fee: u64,
-    #[arg(
-        long,
         value_name = "whitelist",
         help = "Path to whitelist of allowed miners",
         default_value = None,
         global = true
     )]
     whitelist: Option<String>,
+
     #[arg(
         long,
         value_name = "signup cost",
@@ -128,6 +121,27 @@ struct Args {
         global = true
     )]
     signup_cost: u64,
+
+    #[arg(
+        long,
+        value_name = "MICROLAMPORTS",
+        help = "Price to pay for compute units. If dynamic fees are enabled, this value will be used as the cap.",
+        default_value = "500000",
+        global = true
+    )]
+    priority_fee: Option<u64>,
+
+    #[arg(
+        long,
+        value_name = "DYNAMIC_FEE_URL",
+        help = "RPC URL to use for dynamic fee estimation.",
+        global = true
+    )]
+    dynamic_fee_url: Option<String>,
+
+    #[arg(long, help = "Enable dynamic priority fees", global = true)]
+    dynamic_fee: bool,
+
     #[arg(
         long,
         value_name = "EXPECTED_MIN_DIFFICULTY",
@@ -135,6 +149,16 @@ struct Args {
         default_value = "18"
     )]
     pub expected_min_difficulty: u32,
+    
+    /// Mine with sound notification on/off
+    #[arg(
+        long,
+        value_name = "NO_SOUND_NOTIFICATION",
+        help = "Sound notification off by default",
+        default_value = "false",
+        global = true
+    )]
+	no_sound_notification: bool,
 }
 
 #[tokio::main]
@@ -450,7 +474,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         difficulty
                     );
 
-                    for i in 0..7 {
+                    for i in 0..5 {
                         if let Ok((hash, _slot)) = rpc_client
                             .get_latest_blockhash_with_commitment(rpc_client.commitment())
                             .await
@@ -527,8 +551,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 break;
                             } else {
                                 // sent error
-                                if i >= 7 {
-                                    info!("Failed to send after 7 attempts. Discarding and refreshing data.");
+                                if i >= 5 {
+                                    info!("Failed to send after 5 attempts. Discarding and refreshing data.");
                                     // reset nonce
                                     {
                                         let mut nonce = app_nonce.lock().await;
