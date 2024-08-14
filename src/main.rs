@@ -9,6 +9,8 @@ use std::{
 };
 
 use self::models::*;
+use dynamic_fee as pfee;
+
 use axum::{
     extract::{
         ws::{Message, WebSocket},
@@ -26,13 +28,13 @@ use deadpool_diesel::mysql::{Manager, Pool};
 use diesel::{
     query_dsl::methods::FilterDsl,
     sql_types::{Bool, Text},
-    ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl, SelectableHelper,
+    MysqlConnection, QueryDsl, RunQueryDsl, SelectableHelper,
 };
 use drillx::Solution;
 use futures::{stream::SplitSink, SinkExt, StreamExt};
-use ore_api::{consts::BUS_COUNT, state::Proof};
+use ore_api::{consts::{BUS_ADDRESSES, BUS_COUNT}, state::Proof};
 use ore_utils::{
-    get_auth_ix, get_cutoff, get_mine_ix, get_proof, get_proof_and_config_with_busses,
+    get_auth_ix, get_cutoff, get_mine_ix, get_proof, get_proof_and_best_bus,
     get_register_ix, get_reset_ix, ORE_TOKEN_DECIMALS,
 };
 use rand::Rng;
@@ -59,8 +61,11 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod dynamic_fee;
 mod models;
+mod ore_utils;
 mod schema;
+mod utils;
 
 const MIN_DIFF: u32 = 8;
 const MIN_HASHPOWER: u64 = 5;
@@ -99,7 +104,12 @@ pub struct Config {
     whitelist: Option<HashSet<Pubkey>>,
 }
 
-mod ore_utils;
+pub struct DifficultyPayload {
+    pub solution_difficulty: u32,
+    pub expected_min_difficulty: u32,
+    pub extra_fee_difficulty: u32,
+    pub extra_fee_percent: u64,
+}
 
 #[derive(Parser, Debug)]
 #[command(version, author, about, long_about = None)]
@@ -124,12 +134,33 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "MICROLAMPORTS",
-        help = "Price to pay for compute units. If dynamic fees are enabled, this value will be used as the cap.",
-        default_value = "500000",
+        short,
+        value_name = "BUFFER_SECONDS",
+        help = "The number seconds before the deadline to stop mining and start submitting.",
+        default_value = "5"
+    )]
+    pub buffer_time: u64,
+
+    #[arg(
+        long,
+        value_name = "FEE_MICROLAMPORTS",
+        help = "Price to pay for compute units when dynamic fee flag is off, or dynamic fee is unavailable.",
+        default_value = "20000",
         global = true
     )]
     priority_fee: Option<u64>,
+
+    #[arg(
+        long,
+        value_name = "FEE_CAP_MICROLAMPORTS",
+        help = "Max price to pay for compute units when dynamic fees are enabled.",
+        default_value = "500000",
+        global = true
+    )]
+    priority_fee_cap: Option<u64>,
+
+    #[arg(long, help = "Enable dynamic priority fees", global = true)]
+    dynamic_fee: bool,
 
     #[arg(
         long,
@@ -139,17 +170,33 @@ struct Args {
     )]
     dynamic_fee_url: Option<String>,
 
-    #[arg(long, help = "Enable dynamic priority fees", global = true)]
-    dynamic_fee: bool,
-
     #[arg(
         long,
+        short,
         value_name = "EXPECTED_MIN_DIFFICULTY",
-        help = "The min difficulty expected from miner's submissions.",
+        help = "The expected min difficulty to submit for miner.",
         default_value = "18"
     )]
     pub expected_min_difficulty: u32,
-    
+
+    #[arg(
+        long,
+        short,
+        value_name = "EXTRA_FEE_DIFFICULTY",
+        help = "The min difficulty that the miner thinks deserves to pay more priority fee.",
+        default_value = "27"
+    )]
+    pub extra_fee_difficulty: u32,
+
+    #[arg(
+        long,
+        short,
+        value_name = "EXTRA_FEE_PERCENT",
+        help = "The extra percentage that the miner thinks deserves to pay more priority fee. Integer range 0..100 inclusive and the final priority fee cannot exceed the priority fee cap.",
+        default_value = "0"
+    )]
+    pub extra_fee_percent: u64,
+
     /// Mine with sound notification on/off
     #[arg(
         long,
@@ -158,7 +205,7 @@ struct Args {
         default_value = "false",
         global = true
     )]
-	no_sound_notification: bool,
+    pub no_sound_notification: bool,
 }
 
 #[tokio::main]
@@ -220,9 +267,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    let priority_fee = Arc::new(Mutex::new(args.priority_fee));
+    // let priority_fee = Arc::new(Mutex::new(args.priority_fee));
+    let priority_fee = Arc::new(args.priority_fee);
+    let priority_fee_cap = Arc::new(args.priority_fee_cap);
 
-    let min_difficulty = args.expected_min_difficulty; // MI
+    // let expected_min_difficulty = Arc::new(args.expected_min_difficulty);
+    let min_difficulty = Arc::new(args.expected_min_difficulty);
+    let extra_fee_difficulty = Arc::new(args.extra_fee_difficulty);
+    let extra_fee_percent = Arc::new(args.extra_fee_percent);
+
+    let dynamic_fee = Arc::new(args.dynamic_fee);
+    let dynamic_fee_url = Arc::new(args.dynamic_fee_url);
+
+    let no_sound_notification = Arc::new(args.no_sound_notification);
 
     // load wallet
     let wallet_path = Path::new(&wallet_path_str);
@@ -326,7 +383,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             app_ready_clients,
             app_proof,
             app_epoch_hashes,
-            min_difficulty,
+            *min_difficulty,
         )
         .await;
     });
@@ -410,7 +467,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_epoch_hashes = epoch_hashes.clone();
     let app_wallet = wallet_extension.clone();
     let app_nonce = nonce_ext.clone();
-    let app_prio_fee = priority_fee.clone();
+    // let app_prio_fee = priority_fee.clone();
     let app_rpc_client = rpc_client.clone();
     tokio::spawn(async move {
         let rpc_client = app_rpc_client;
@@ -424,38 +481,83 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(solution) = solution {
                     let signer = app_wallet.clone();
                     let mut ixs = vec![];
-                    // TODO: set cu's
-                    let prio_fee = { app_prio_fee.lock().await.clone() };
 
+                    // TODO: choose better cu limit
                     let cu_limit_ix = ComputeBudgetInstruction::set_compute_unit_limit(480000);
                     ixs.push(cu_limit_ix);
 
-                    let prio_fee_ix = ComputeBudgetInstruction::set_compute_unit_price(prio_fee);
+                    let mut fee_type: &str = "static"; 
+                    let fee: u64 = if *dynamic_fee {
+                        fee_type = "estimate";
+                        match pfee::dynamic_fee(
+                            &rpc_client,
+                            (*dynamic_fee_url).clone(),
+                            *priority_fee_cap,
+                        )
+                        .await
+                        {
+                            Ok(fee) => {
+                                let mut prio_fee = fee;
+                                // MI: calc uplimit of priority fee for precious fee difficulty, eg. diff > 27
+                                {
+                                    let solution_difficulty = solution.to_hash().difficulty();
+                                    if solution_difficulty > *extra_fee_difficulty {
+                                        prio_fee = if let Some(ref priority_fee_cap) = *priority_fee_cap {
+                                            (*priority_fee_cap).min(
+                                                prio_fee
+                                                    .saturating_mul(
+                                                        100u64.saturating_add(*extra_fee_percent),
+                                                    )
+                                                    .saturating_div(100),
+                                            )
+                                        } else {
+                                            // No priority_fee set as cap, not exceed 300K
+                                            300_000.min(
+                                                prio_fee
+                                                    .saturating_mul(
+                                                        100u64.saturating_add(*extra_fee_percent),
+                                                    )
+                                                    .saturating_div(100),
+                                            )
+                                        }
+                                    }
+                                }
+                                prio_fee
+                            }
+                            Err(err) => {
+                                let fee = priority_fee.unwrap_or(0);
+                                println!(
+                                    "Error: {} Falling back to static value: {} microlamports",
+                                    err, fee
+                                );
+                                fee
+                            }
+                        }
+                    } else {
+                        // static
+                        priority_fee.unwrap_or(0)
+                    };
+
+                    let prio_fee_ix = ComputeBudgetInstruction::set_compute_unit_price(fee);
                     ixs.push(prio_fee_ix);
 
                     let noop_ix = get_auth_ix(signer.pubkey());
                     ixs.push(noop_ix);
 
                     let mut bus = rand::thread_rng().gen_range(0..BUS_COUNT);
-                    if let (Ok(l_proof), Ok(config), Ok(busses)) =
-                        get_proof_and_config_with_busses(&rpc_client, signer.pubkey()).await
+                    // MI
+                    // if let (Ok(l_proof), Ok(_config), Ok(busses)) =
+                    //     get_proof_and_config_with_busses(&rpc_client, signer.pubkey()).await
+                    if let Ok((l_proof, (best_bus_id, _best_bus))) =
+                        get_proof_and_best_bus(&rpc_client, signer.pubkey()).await
                     {
-                        let now = SystemTime::now()
+                        let _now = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .expect("Time went backwards")
                             .as_secs();
 
                         proof = l_proof;
-
-                        let mut best_bus = 0;
-                        for (i, bus) in busses.iter().enumerate() {
-                            if let Ok(bus) = bus {
-                                if bus.rewards > busses[best_bus].unwrap().rewards {
-                                    best_bus = i;
-                                }
-                            }
-                        }
-                        bus = best_bus;
+                        bus = best_bus_id;
 
                         // MI: meaningless here
                         // let time_until_reset = (config.last_reset_at + 60) - now as i64;
@@ -474,7 +576,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         difficulty
                     );
 
-                    for i in 0..5 {
+                    for i in 0..3 {
                         if let Ok((hash, _slot)) = rpc_client
                             .get_latest_blockhash_with_commitment(rpc_client.commitment())
                             .await
@@ -482,7 +584,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let mut tx = Transaction::new_with_payer(&ixs, Some(&signer.pubkey()));
 
                             tx.sign(&[&signer], hash);
-                            info!("Sending signed tx...");
+                            info!("Sending signed tx... with {} priority fee {}", fee_type, fee);
                             info!("attempt: {}", i + 1);
                             let sig = rpc_client
                                 .send_and_confirm_transaction_with_spinner(&tx)
@@ -491,6 +593,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // success
                                 info!("Success!!");
                                 info!("Sig: {}", sig);
+                                if ! *no_sound_notification {
+                                    utils::play_sound();
+                                }
                                 // update proof
                                 loop {
                                     if let Ok(loaded_proof) =
@@ -551,8 +656,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 break;
                             } else {
                                 // sent error
-                                if i >= 5 {
-                                    info!("Failed to send after 5 attempts. Discarding and refreshing data.");
+                                if i >= 3 {
+                                    info!("Failed to send after 3 attempts. Discarding and refreshing data.");
                                     // reset nonce
                                     {
                                         let mut nonce = app_nonce.lock().await;
@@ -824,7 +929,7 @@ async fn post_signup(
         } else {
             println!("Valid signup tx, submitting.");
 
-            if let Ok(sig) = rpc_client.send_and_confirm_transaction(&tx).await {
+            if let Ok(_sig) = rpc_client.send_and_confirm_transaction(&tx).await {
                 // add user to db
             } else {
                 return Response::builder()
