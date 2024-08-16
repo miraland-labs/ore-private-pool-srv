@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
-    ops::{ControlFlow, Div, Mul},
+    ops::{ControlFlow, Div, Mul, Range},
     path::Path,
     str::FromStr,
     sync::Arc,
@@ -9,7 +9,10 @@ use std::{
 };
 
 use self::models::*;
+use dashmap::DashMap;
 use dynamic_fee as pfee;
+use ::ore_utils::AccountDeserialize;
+use app_database::{AppDatabase, AppDatabaseError};
 
 use axum::{
     extract::{
@@ -19,16 +22,16 @@ use axum::{
     http::{Response, StatusCode},
     response::IntoResponse,
     routing::{get, post},
-    Extension, Router,
+    Extension, Router, debug_handler,
 };
 use axum_extra::{headers::authorization::Basic, TypedHeader};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use clap::{
-	builder::{
-		styling::{AnsiColor, Effects},
-		Styles,
-	},
-	command, Parser, Subcommand,
+    builder::{
+        styling::{AnsiColor, Effects},
+        Styles,
+    },
+    command, Parser, Subcommand,
 };
 use deadpool_diesel::mysql::{Manager, Pool};
 use diesel::{
@@ -38,14 +41,22 @@ use diesel::{
 };
 use drillx::Solution;
 use futures::{stream::SplitSink, SinkExt, StreamExt};
-use ore_api::{consts::{BUS_ADDRESSES, BUS_COUNT}, state::Proof};
+use ore_api::{
+    consts::{BUS_ADDRESSES, BUS_COUNT},
+    state::Proof,
+};
 use ore_utils::{
-    get_auth_ix, get_cutoff, get_mine_ix, get_proof, get_proof_and_best_bus,
-    get_register_ix, get_reset_ix, ORE_TOKEN_DECIMALS,
+    get_auth_ix, get_cutoff, get_mine_ix, get_ore_mint, get_proof, get_proof_and_best_bus,
+    get_proof_and_config_with_busses, get_register_ix, get_reset_ix, proof_pubkey,
+    ORE_TOKEN_DECIMALS,
 };
 use rand::Rng;
 use serde::Deserialize;
-use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_account_decoder::UiAccountEncoding;
+use solana_client::{
+    nonblocking::{pubsub_client::PubsubClient, rpc_client::RpcClient},
+    rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
+};
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     compute_budget::ComputeBudgetInstruction,
@@ -56,6 +67,7 @@ use solana_sdk::{
     system_instruction,
     transaction::Transaction,
 };
+use spl_associated_token_account::get_associated_token_address;
 use tokio::{
     io::AsyncReadExt,
     sync::{
@@ -64,9 +76,10 @@ use tokio::{
     },
 };
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod app_database;
 mod dynamic_fee;
 mod models;
 mod ore_utils;
@@ -77,16 +90,27 @@ const MIN_DIFF: u32 = 8;
 const MIN_HASHPOWER: u64 = 5;
 
 struct AppState {
-    sockets: HashMap<SocketAddr, (Pubkey, Mutex<SplitSink<WebSocket, Message>>)>,
+    sockets: HashMap<SocketAddr, (Pubkey, Arc<Mutex<SplitSink<WebSocket, Message>>>)>,
+    // miner_sockets: HashMap<i32, (Pubkey, Arc<Mutex<SplitSink<WebSocket, Message>>>)>,
+    miner_sockets: HashMap<Pubkey, Arc<Mutex<SplitSink<WebSocket, Message>>>>,
 }
 
 pub struct MessageInternalMineSuccess {
     difficulty: u32,
     total_balance: f64,
-    rewards: f64,
+    rewards: u64,
     total_hashpower: u64,
     submissions: HashMap<Pubkey, (u32, u64)>,
 }
+
+// pub struct MessageInternalMineSuccess {
+//     difficulty: u32,
+//     total_balance: f64,
+//     pool_id: i32,
+//     rewards: u64,
+//     total_hashpower: u64,
+//     submissions: Vec<Submission>,
+// }
 
 #[derive(Debug)]
 pub enum ClientMessage {
@@ -97,7 +121,7 @@ pub enum ClientMessage {
 
 pub struct EpochHashes {
     best_hash: BestHash,
-    submissions: HashMap<Pubkey, (u32, u64)>,
+    submissions: HashMap<Pubkey, (/* diff: */ u32, /* hashpower: */ u64)>, // MI
 }
 
 pub struct BestHash {
@@ -108,6 +132,7 @@ pub struct BestHash {
 pub struct Config {
     password: String,
     whitelist: Option<HashSet<Pubkey>>,
+    // pool_id: i32,
 }
 
 pub struct DifficultyPayload {
@@ -137,6 +162,9 @@ struct Args {
         global = true
     )]
     signup_cost: u64,
+
+    #[arg(long, help = "Powered by dbms.", global = true)]
+    powered_by_dbms: bool,
 
     #[arg(
         long,
@@ -230,14 +258,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // load envs
     let wallet_path_str = std::env::var("WALLET_PATH").expect("WALLET_PATH must be set.");
     let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set.");
+    let rpc_ws_url = std::env::var("RPC_WS_URL").expect("RPC_WS_URL must be set.");
     let password = std::env::var("PASSWORD").expect("PASSWORD must be set.");
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set.");
+    // let mut powered_by_dbms = std::env::var("POWERED_BY_DBMS").expect("POWERED_BY_DBMS must be set.");
 
-    let manager = Manager::new(database_url, deadpool_diesel::Runtime::Tokio1);
-
-    let pool = Pool::builder(manager).build().unwrap();
-
-    let database_pool = Arc::new(pool);
+    // MI
+    let app_database = Arc::new(AppDatabase::new(database_url));
+    let virtual_database: Arc<DashMap<Pubkey, InsertSubmission>> = DashMap::new().into();
 
     let whitelist = if let Some(whitelist) = args.whitelist {
         let file = Path::new(&whitelist);
@@ -278,11 +306,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let priority_fee = Arc::new(args.priority_fee);
     let priority_fee_cap = Arc::new(args.priority_fee_cap);
 
+    let buffer_time = Arc::new(args.buffer_time);
+
     // let expected_min_difficulty = Arc::new(args.expected_min_difficulty);
     let min_difficulty = Arc::new(args.expected_min_difficulty);
     let extra_fee_difficulty = Arc::new(args.extra_fee_difficulty);
     let extra_fee_percent = Arc::new(args.extra_fee_percent);
 
+    let powered_by_dbms = args.powered_by_dbms;
     let dynamic_fee = Arc::new(args.dynamic_fee);
     let dynamic_fee_url = Arc::new(args.dynamic_fee_url);
 
@@ -310,17 +341,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Failed to load balance".into());
     };
 
-    println!("Balance: {:.2}", balance as f64 / LAMPORTS_PER_SOL as f64);
+    info!("Balance: {:.2}", balance as f64 / LAMPORTS_PER_SOL as f64);
 
     if balance < 1_000_000 {
         return Err("Sol balance is too low!".into());
     }
 
-    let proof = if let Ok(loaded_proof) = get_proof(&rpc_client, wallet.pubkey()).await {
+    let mut proof = if let Ok(loaded_proof) = get_proof(&rpc_client, wallet.pubkey()).await {
         loaded_proof
     } else {
-        println!("Failed to load proof.");
-        println!("Creating proof account...");
+        info!("Failed to load proof.");
+        info!("Creating proof account...");
 
         let ix = get_register_ix(wallet.pubkey());
 
@@ -353,11 +384,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         proof
     };
 
-    let config = Arc::new(Mutex::new(Config {
-        password,
-        whitelist,
-    }));
-
     let epoch_hashes = Arc::new(RwLock::new(EpochHashes {
         best_hash: BestHash {
             solution: None,
@@ -366,14 +392,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         submissions: HashMap::new(),
     }));
 
+    let config = Arc::new(Mutex::new(Config {
+        password,
+        whitelist,
+        // pool_id: db_pool.id,
+    }));
+
     let wallet_extension = Arc::new(wallet);
     let proof_ext = Arc::new(Mutex::new(proof));
     let nonce_ext = Arc::new(Mutex::new(0u64));
 
+    let client_nonce_ranges = Arc::new(RwLock::new(HashMap::new()));
+
     let shared_state = Arc::new(RwLock::new(AppState {
         sockets: HashMap::new(),
+        miner_sockets: HashMap::new(),
     }));
     let ready_clients = Arc::new(Mutex::new(HashSet::new()));
+
+    let app_wallet = wallet_extension.clone();
+    let app_proof = proof_ext.clone();
+    // Establish webocket connection for tracking pool proof changes.
+    tokio::spawn(async move {
+        proof_tracking_system(rpc_ws_url, app_wallet, app_proof).await;
+    });
 
     let (client_message_sender, client_message_receiver) =
         tokio::sync::mpsc::unbounded_channel::<ClientMessage>();
@@ -383,14 +425,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_ready_clients = ready_clients.clone();
     let app_proof = proof_ext.clone();
     let app_epoch_hashes = epoch_hashes.clone();
+    let app_app_database = app_database.clone();
+    let app_virtual_database = virtual_database.clone();
+    let app_client_nonce_ranges = client_nonce_ranges.clone();
+    let app_powered_by_dbms = powered_by_dbms;
     tokio::spawn(async move {
         client_message_handler_system(
             client_message_receiver,
             &app_shared_state,
+            app_app_database,
+            app_virtual_database,
+            app_epoch_hashes,
             app_ready_clients,
             app_proof,
-            app_epoch_hashes,
+            app_client_nonce_ranges,
             *min_difficulty,
+            app_powered_by_dbms,
         )
         .await;
     });
@@ -398,9 +448,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle ready clients
     let app_shared_state = shared_state.clone();
     let app_proof = proof_ext.clone();
-    let app_epoch_hashes = epoch_hashes.clone();
     let app_nonce = nonce_ext.clone();
+    let app_epoch_hashes = epoch_hashes.clone();
+    let app_app_database = app_database.clone();
+
+    let app_client_nonce_ranges = client_nonce_ranges.clone();
+
     tokio::spawn(async move {
+        let app_database = app_app_database;
         loop {
             let mut clients = Vec::new();
             {
@@ -410,9 +465,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
-            let proof = { app_proof.lock().await.clone() };
+            // MI: proof => current_proof
+            let current_proof = { app_proof.lock().await.clone() };
 
-            let cutoff = get_cutoff(proof, 5);
+            // let cutoff = get_cutoff(proof, 5);
+            let cutoff = get_cutoff(proof, *buffer_time);
             let mut should_mine = true;
             let cutoff = if cutoff <= 0 {
                 let solution = app_epoch_hashes.read().await.best_hash.solution;
@@ -425,7 +482,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             if should_mine {
-                let challenge = proof.challenge;
+                let challenge = current_proof.challenge;
 
                 for client in clients {
                     let nonce_range = {
@@ -457,12 +514,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .send(Message::Binary(bin_data.to_vec()))
                                 .await;
                             let _ = ready_clients.lock().await.remove(&client);
+                            let _ = app_client_nonce_ranges
+                                .write()
+                                .await
+                                .insert(sender.0, nonce_range);
                         }
                     }
                 }
             }
 
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            // tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(*buffer_time)).await;
         }
     });
 
@@ -476,12 +538,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_nonce = nonce_ext.clone();
     // let app_prio_fee = priority_fee.clone();
     let app_rpc_client = rpc_client.clone();
+    let app_config = config.clone();
+    let app_app_database = app_database.clone();
     tokio::spawn(async move {
         let rpc_client = app_rpc_client;
+        let app_database = app_app_database;
         loop {
-            let mut proof = { app_proof.lock().await.clone() };
+            let mut old_proof = { app_proof.lock().await.clone() };
 
-            let cutoff = get_cutoff(proof, 0);
+            let cutoff = get_cutoff(old_proof, 0);
             if cutoff <= 0 {
                 // process solutions
                 let solution = { app_epoch_hashes.read().await.best_hash.solution.clone() };
@@ -493,7 +558,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let cu_limit_ix = ComputeBudgetInstruction::set_compute_unit_limit(480000);
                     ixs.push(cu_limit_ix);
 
-                    let mut fee_type: &str = "static"; 
+                    let mut fee_type: &str = "static";
                     let fee: u64 = if *dynamic_fee {
                         fee_type = "estimate";
                         match pfee::dynamic_fee(
@@ -509,7 +574,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 {
                                     let solution_difficulty = solution.to_hash().difficulty();
                                     if solution_difficulty > *extra_fee_difficulty {
-                                        prio_fee = if let Some(ref priority_fee_cap) = *priority_fee_cap {
+                                        prio_fee = if let Some(ref priority_fee_cap) =
+                                            *priority_fee_cap
+                                        {
                                             (*priority_fee_cap).min(
                                                 prio_fee
                                                     .saturating_mul(
@@ -552,9 +619,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ixs.push(noop_ix);
 
                     let mut bus = rand::thread_rng().gen_range(0..BUS_COUNT);
-                    // MI
-                    // if let (Ok(l_proof), Ok(_config), Ok(busses)) =
-                    //     get_proof_and_config_with_busses(&rpc_client, signer.pubkey()).await
                     if let Ok((l_proof, (best_bus_id, _best_bus))) =
                         get_proof_and_best_bus(&rpc_client, signer.pubkey()).await
                     {
@@ -565,25 +629,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         proof = l_proof;
                         bus = best_bus_id;
-
-                        // MI: meaningless here
-                        // let time_until_reset = (config.last_reset_at + 60) - now as i64;
-                        // if time_until_reset <= 5 {
-                        //     let reset_ix = get_reset_ix(signer.pubkey());
-                        //     ixs.push(reset_ix);
-                        // }
                     }
-
-                    let difficulty = solution.to_hash().difficulty();
 
                     let ix_mine = get_mine_ix(signer.pubkey(), solution, bus);
                     ixs.push(ix_mine);
+
+                    let difficulty = solution.to_hash().difficulty();
                     info!(
                         "Starting mine submission attempts with difficulty {}.",
                         difficulty
                     );
 
-                    for i in 0..3 {
+                    for i in 0..5 {
                         if let Ok((hash, _slot)) = rpc_client
                             .get_latest_blockhash_with_commitment(rpc_client.commitment())
                             .await
@@ -591,7 +648,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let mut tx = Transaction::new_with_payer(&ixs, Some(&signer.pubkey()));
 
                             tx.sign(&[&signer], hash);
-                            info!("Sending signed tx... with {} priority fee {}", fee_type, fee);
+                            info!(
+                                "Sending signed tx... with {} priority fee {}",
+                                fee_type, fee
+                            );
                             info!("attempt: {}", i + 1);
                             let sig = rpc_client
                                 .send_and_confirm_transaction_with_spinner(&tx)
@@ -600,71 +660,141 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // success
                                 info!("Success!!");
                                 info!("Sig: {}", sig);
-                                if ! *no_sound_notification {
+                                if !*no_sound_notification {
                                     utils::play_sound();
                                 }
+
+                                if powered_by_dbms {
+                                    // let itxn = InsertTxn {
+                                    //     txn_type: "mine".to_string(),
+                                    //     signature: sig.to_string(),
+                                    //     priority_fee: prio_fee as u32,
+                                    // };
+                                    // let _ = app_database.add_new_txn(itxn).await.unwrap();
+                                }
+
                                 // update proof
                                 loop {
-                                    if let Ok(loaded_proof) =
-                                        get_proof(&rpc_client, signer.pubkey()).await
-                                    {
-                                        if proof != loaded_proof {
-                                            info!("Got new proof.");
-                                            let balance = (loaded_proof.balance as f64)
-                                                / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
-                                            info!("New balance: {}", balance);
-                                            let rewards = loaded_proof.balance - proof.balance;
-                                            let rewards = (rewards as f64)
-                                                / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
-                                            info!("Earned: {} ORE", rewards);
+                                    info!("Waiting for proof hash update");
+                                    let latest_proof = { app_proof.lock().await.clone() };
 
-                                            let submissions = {
-                                                app_epoch_hashes.read().await.submissions.clone()
-                                            };
+                                    if old_proof.challenge.eq(&latest_proof.challenge) {
+                                        info!("Proof challenge not updated yet..");
+                                        old_proof = latest_proof;
+                                        tokio::time::sleep(Duration::from_millis(1000)).await;
+                                        continue;
+                                    } else {
+                                        info!("Proof challenge updated! Checking rewards earned.");
+                                        let balance = (latest_proof.balance as f64)
+                                            / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
+                                        info!("New balance: {}", balance);
+                                        let rewards = latest_proof.balance - old_proof.balance;
+                                        let dec_rewards = (rewards as f64)
+                                            / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
+                                        info!("Earned: {} ORE", dec_rewards);
 
-                                            let mut total_hashpower: u64 = 0;
+                                        let submissions =
+                                            { app_epoch_hashes.read().await.submissions.clone() };
+
+                                        if powered_by_dbms {
+                                            // let submission_id = app_database.get_submission_id_with_nonce(u64::from_le_bytes(solution.n)).await.unwrap();
+
+                                            // let _ = app_database.update_challenge_rewards(old_proof.challenge.to_vec(), submission_id, rewards).await.unwrap();
+                                            // let _ = app_database.update_pool_rewards(app_wallet.pubkey().to_string(), rewards).await.unwrap();
+
+                                            // let submissions = app_database.get_all_submission_for_challenge(old_proof.challenge.to_vec()).await.unwrap();
+                                        }
+
+                                        let mut total_hashpower: u64 = 0;
+                                        if powered_by_dbms {
+                                            // for submission in submissions.iter() {
+                                            //     let hashpower = MIN_HASHPOWER * 2u64.pow(submission.difficulty as u32 - MIN_DIFF);
+                                            //     total_hashpower += hashpower;
+                                            // }
+                                        } else {
                                             for submission in submissions.iter() {
                                                 total_hashpower += submission.1 .1
                                             }
+                                        }
 
-                                            let _ = mine_success_sender.send(
-                                                MessageInternalMineSuccess {
-                                                    difficulty,
-                                                    total_balance: balance,
-                                                    rewards,
-                                                    total_hashpower,
-                                                    submissions,
-                                                },
-                                            );
+                                        let _ =
+                                            mine_success_sender.send(MessageInternalMineSuccess {
+                                                difficulty,
+                                                total_balance: balance,
+                                                // pool_id: app_config.pool_id,
+                                                rewards,
+                                                total_hashpower,
+                                                submissions,
+                                            });
 
+                                        if powered_by_dbms {
+                                            {
+                                                // let new_challenge = InsertChallenge {
+                                                //     pool_id: app_config.pool_id,
+                                                //     challenge: latest_proof.challenge.to_vec(),
+                                                //     rewards_earned: None,
+                                                // };
+
+                                                // info!("NEW CHALLENGE: {:?}", new_challenge);
+                                                // let result = app_database.add_new_challenge(new_challenge).await;
+
+                                                // match result {
+                                                //     Ok(_) => {}
+                                                //     Err(AppDatabaseError::FailedToInsertNewEntity) => {
+                                                //         panic!("Failed to create new challenge in database");
+                                                //     },
+                                                //     Err(_) => {
+                                                //         panic!("AppDatabase query failed");
+                                                //     }
+                                                // }
+
+                                                // {
+                                                //     let mut prio_fee = app_prio_fee.lock().await;
+                                                //     let mut decrease_amount = 0;
+                                                //     if *prio_fee >=  1_000 {
+                                                //         decrease_amount = 1_000;
+                                                //     }
+                                                //     if *prio_fee >=  50_000 {
+                                                //         decrease_amount = 5_000;
+                                                //     }
+                                                //     if *prio_fee >=  100_000 {
+                                                //         decrease_amount = 10_000;
+                                                //     }
+
+                                                //     *prio_fee = prio_fee.saturating_sub(decrease_amount);
+                                                // }
+                                            }
+                                        } else {
                                             {
                                                 let mut mut_proof = app_proof.lock().await;
-                                                *mut_proof = loaded_proof;
+                                                *mut_proof = latest_proof;
                                                 break;
                                             }
                                         }
-                                    } else {
-                                        tokio::time::sleep(Duration::from_millis(500)).await;
+
+                                        // reset nonce
+                                        {
+                                            let mut nonce = app_nonce.lock().await;
+                                            *nonce = 0;
+                                        }
+                                        // reset epoch hashes
+                                        {
+                                            info!("reset epoch hashes");
+                                            let mut mut_epoch_hashes =
+                                                app_epoch_hashes.write().await;
+                                            mut_epoch_hashes.best_hash.solution = None;
+                                            mut_epoch_hashes.best_hash.difficulty = 0;
+                                            mut_epoch_hashes.submissions = HashMap::new();
+                                        }
+                                        break;
                                     }
                                 }
-                                // reset nonce
-                                {
-                                    let mut nonce = app_nonce.lock().await;
-                                    *nonce = 0;
-                                }
-                                // reset epoch hashes
-                                {
-                                    info!("reset epoch hashes");
-                                    let mut mut_epoch_hashes = app_epoch_hashes.write().await;
-                                    mut_epoch_hashes.best_hash.solution = None;
-                                    mut_epoch_hashes.best_hash.difficulty = 0;
-                                    mut_epoch_hashes.submissions = HashMap::new();
-                                }
+
                                 break;
                             } else {
                                 // sent error
-                                if i >= 3 {
-                                    info!("Failed to send after 3 attempts. Discarding and refreshing data.");
+                                if i >= 4 {
+                                    warn!("Failed to send after 5 attempts. Discarding and refreshing data.");
                                     // reset nonce
                                     {
                                         let mut nonce = app_nonce.lock().await;
@@ -678,18 +808,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         mut_epoch_hashes.best_hash.difficulty = 0;
                                         mut_epoch_hashes.submissions = HashMap::new();
                                     }
+                                    // break for (0..3), re-enter loop to restart
                                     break;
                                 }
                             }
-                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            tokio::time::sleep(Duration::from_millis(1000)).await;
                         } else {
                             error!("Failed to get latest blockhash. retrying...");
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            // MI: vanilla 1000
+                            tokio::time::sleep(Duration::from_millis(1000)).await;
                         }
                     }
                 } else {
-                    // No solution received yet.
+                    // error!("No best solution received yet.");
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
             } else {
                 tokio::time::sleep(Duration::from_secs(cutoff as u64)).await;
@@ -698,10 +829,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let app_shared_state = shared_state.clone();
+    let app_app_database = app_database.clone();
+    let app_rpc_client = rpc_client.clone();
+    let app_wallet = wallet_extension.clone();
+    // let app_powered_by_dbms = powered_by_dbms.clone();
     tokio::spawn(async move {
+        let app_database = app_app_database;
         loop {
             while let Some(msg) = mine_success_receiver.recv().await {
                 {
+                    let decimals = 10f64.powf(ORE_TOKEN_DECIMALS as f64);
+                    let pool_rewards_dec = (msg.rewards as f64).div(decimals);
                     let shared_state = app_shared_state.read().await;
                     for (_socket_addr, socket_sender) in shared_state.sockets.iter() {
                         let pubkey = socket_sender.0;
@@ -709,37 +847,73 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Some((supplied_diff, pubkey_hashpower)) =
                             msg.submissions.get(&pubkey)
                         {
-                            let hashpower_percent =
-                                (*pubkey_hashpower as f64).div(msg.total_hashpower as f64);
+                            // let hashpower_percent =
+                            //     (*pubkey_hashpower as f64).div(msg.total_hashpower as f64);
 
-                            // TODO: handle overflow/underflow and float imprecision issues
-                            let decimals = 10f64.powf(ORE_TOKEN_DECIMALS as f64);
+                            let hashpower =
+                                MIN_HASHPOWER * 2u64.pow(*supplied_diff as u32 - MIN_DIFF);
+
+                            let hashpower_percent = (hashpower as u128)
+                                .saturating_mul(1_000_000)
+                                .saturating_div(msg.total_hashpower as u128);
+
+                            // let decimals = 10f64.powf(ORE_TOKEN_DECIMALS as f64);
+                            // let earned_rewards = hashpower_percent
+                            //     .mul(msg.rewards)
+                            //     .mul(decimals)
+                            //     .floor()
+                            //     .div(decimals);
                             let earned_rewards = hashpower_percent
-                                .mul(msg.rewards)
-                                .mul(decimals)
-                                .floor()
-                                .div(decimals);
-                            let message = format!(
-                                "Submitted Difficulty: {}\nPool Earned: {} ORE.\nPool Balance: {}\nMiner Earned: {} ORE for difficulty: {}",
-                                msg.difficulty,
-                                msg.rewards,
-                                msg.total_balance,
-                                earned_rewards,
-                                supplied_diff
-                            );
-                            if let Ok(_) = socket_sender
-                                .1
-                                .lock()
-                                .await
-                                .send(Message::Text(message))
-                                .await
-                            {
-                            } else {
-                                println!("Failed to send client text");
+                                .saturating_mul(msg.rewards as u128)
+                                .saturating_div(1_000_000)
+                                as u64;
+
+                            if powered_by_dbms {
+                                // let _ = app_database
+                                //     .update_miner_reward(submission.miner_id, earned_rewards as u64)
+                                //     .await
+                                //     .unwrap();
+                                // let earning = InsertEarning {
+                                //     miner_id: submission.miner_id,
+                                //     pool_id: msg.pool_id,
+                                //     challenge_id: submission.challenge_id,
+                                //     amount: earned_rewards,
+                                // };
+                                // let _ = app_database.add_new_earning(earning).await.unwrap();
+                            }
+
+                            if let Some(socket_sender) = shared_state.miner_sockets.get(&pubkey) {
+                                let earned_rewards_dec = (earned_rewards as f64).div(decimals);
+
+                                let message = format!(
+                                    "Submitted Difficulty: {}\nPool Earned: {} ORE.\nPool Balance: {}\nMiner Earned: {} ORE for difficulty: {}",
+                                    msg.difficulty,
+                                    pool_rewards_dec,
+                                    msg.total_balance,
+                                    earned_rewards_dec,
+                                    supplied_diff
+                                );
+                                if let Ok(_) = socket_sender
+                                    .lock()
+                                    .await
+                                    .send(Message::Text(message))
+                                    .await
+                                {
+                                } else {
+                                    println!("Failed to send client text");
+                                }
                             }
                         }
                     }
                 }
+                if let Ok(balance) = app_rpc_client.get_balance(&app_wallet.pubkey()).await {
+                    info!(
+                        "Sol Balance: {:.2}",
+                        balance as f64 / LAMPORTS_PER_SOL as f64
+                    );
+                } else {
+                    error!("Failed to load balance");
+                };
             }
         }
     });
@@ -751,12 +925,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/latest-blockhash", get(get_latest_blockhash))
         .route("/pool/authority/pubkey", get(get_pool_authority_pubkey))
         .route("/signup", post(post_signup))
+        .route("/claim", post(post_claim))
+        .route("/miner/rewards", get(get_miner_rewards))
+        .route("/miner/balance", get(get_miner_balance))
         .with_state(app_shared_state)
-        .layer(Extension(database_pool))
+        .layer(Extension(app_database))
         .layer(Extension(config))
         .layer(Extension(wallet_extension))
         .layer(Extension(client_channel))
         .layer(Extension(rpc_client))
+        .layer(Extension(client_nonce_ranges))
         // Logging
         .layer(
             TraceLayer::new_for_http()
@@ -814,71 +992,81 @@ struct SignupParams {
 
 async fn post_signup(
     query_params: Query<SignupParams>,
-    Extension(database_pool): Extension<Arc<Pool>>,
+    Extension(app_database): Extension<Arc<AppDatabase>>,
     Extension(rpc_client): Extension<Arc<RpcClient>>,
     Extension(wallet): Extension<Arc<Keypair>>,
-    Extension(app_config): Extension<Arc<Mutex<Config>>>,
+    Extension(app_config): Extension<Arc<Config>>,
     body: String,
 ) -> impl IntoResponse {
     if let Ok(user_pubkey) = Pubkey::from_str(&query_params.pubkey) {
-        let db_conn = if let Ok(db_conn) = database_pool.get().await {
-            let res = db_conn
-                .interact(move |conn: &mut MysqlConnection| {
-                    diesel::sql_query("SELECT pubkey, enabled FROM miners WHERE miners.pubkey = ?")
-                        .bind::<Text, _>(user_pubkey.to_string())
-                        .get_result::<Miner>(conn)
-                })
-                .await;
+        let db_miner = app_database
+            .get_miner_by_pubkey_str(user_pubkey.to_string())
+            .await;
 
-            match res {
-                Ok(Ok(miner)) => {
-                    if miner.enabled {
+        match db_miner {
+            Ok(miner) => {
+                if miner.enabled {
+                    println!("Miner account already enabled!");
+                    return Response::builder()
+                        .status(StatusCode::OK)
+                        .header("Content-Type", "text/text")
+                        .body("EXISTS".to_string())
+                        .unwrap();
+                }
+            }
+            Err(AppDatabaseError::EntityDoesNotExist) => {
+                println!("No miner account exists. Signing up new user.");
+            }
+            Err(_) => {
+                error!("Failed to get database pool connection");
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body("Failed to get db pool connection".to_string())
+                    .unwrap();
+            }
+        }
+
+        if let Some(whitelist) = &app_config.whitelist {
+            if whitelist.contains(&user_pubkey) {
+                let result = app_database
+                    .add_new_miner(user_pubkey.to_string(), true)
+                    .await;
+                let miner = app_database
+                    .get_miner_by_pubkey_str(user_pubkey.to_string())
+                    .await
+                    .unwrap();
+
+                let wallet_pubkey = wallet.pubkey();
+                let pool = app_database
+                    .get_pool_by_authority_pubkey(wallet_pubkey.to_string())
+                    .await
+                    .unwrap();
+
+                if result.is_ok() {
+                    let new_reward = InsertReward {
+                        miner_id: miner.id,
+                        pool_id: pool.id,
+                    };
+                    let result = app_database.add_new_reward(new_reward).await;
+
+                    if result.is_ok() {
                         return Response::builder()
                             .status(StatusCode::OK)
                             .header("Content-Type", "text/text")
                             .body("SUCCESS".to_string())
                             .unwrap();
+                    } else {
+                        error!("Failed to add miner rewards tracker to database");
+                        return Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .body("Failed to add miner rewards tracker to database".to_string())
+                            .unwrap();
                     }
-                }
-                Ok(Err(_)) => {
-                    println!("No miner accounts exists. Signing up new user.");
-                }
-                _ => {
-                    println!("Error selecting miner account");
-                }
-            }
-            db_conn
-        } else {
-            error!("Failed to get database pool connection");
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body("Failed to get db pool connection".to_string())
-                .unwrap();
-        };
-
-        if let Some(whitelist) = &app_config.lock().await.whitelist {
-            if whitelist.contains(&user_pubkey) {
-                let res = db_conn
-                    .interact(move |conn: &mut MysqlConnection| {
-                        diesel::sql_query("INSERT INTO miners (pubkey, enabled) VALUES (?, ?)")
-                            .bind::<Text, _>(user_pubkey.to_string())
-                            .bind::<Bool, _>(true)
-                            .execute(conn)
-                            .expect("Failed to insert miner into database!")
-                    })
-                    .await;
-
-                if res.is_ok() {
-                    return Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Content-Type", "text/text")
-                        .body("SUCCESS".to_string())
-                        .unwrap();
                 } else {
                     error!("Failed to add miner to database");
                     return Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body("Failed to add user to database".to_string())
+                        .body("Failed to add miner to database".to_string())
                         .unwrap();
                 }
             }
@@ -937,35 +1125,51 @@ async fn post_signup(
             println!("Valid signup tx, submitting.");
 
             if let Ok(_sig) = rpc_client.send_and_confirm_transaction(&tx).await {
-                // add user to db
+                let res = app_database
+                    .add_new_miner(user_pubkey.to_string(), true)
+                    .await;
+                let miner = app_database
+                    .get_miner_by_pubkey_str(user_pubkey.to_string())
+                    .await
+                    .unwrap();
+
+                let wallet_pubkey = wallet.pubkey();
+                let pool = app_database
+                    .get_pool_by_authority_pubkey(wallet_pubkey.to_string())
+                    .await
+                    .unwrap();
+
+                if res.is_ok() {
+                    let new_reward = InsertReward {
+                        miner_id: miner.id,
+                        pool_id: pool.id,
+                    };
+                    let result = app_database.add_new_reward(new_reward).await;
+
+                    if result.is_ok() {
+                        return Response::builder()
+                            .status(StatusCode::OK)
+                            .header("Content-Type", "text/text")
+                            .body("SUCCESS".to_string())
+                            .unwrap();
+                    } else {
+                        error!("Failed to add miner rewards tracker to database");
+                        return Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .body("Failed to add miner rewards tracker to database".to_string())
+                            .unwrap();
+                    }
+                } else {
+                    error!("Failed to add miner to database");
+                    return Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body("Failed to add user to database".to_string())
+                        .unwrap();
+                }
             } else {
                 return Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body("Failed to send tx".to_string())
-                    .unwrap();
-            }
-
-            let res = db_conn
-                .interact(move |conn: &mut MysqlConnection| {
-                    diesel::sql_query("INSERT INTO miners (pubkey, enabled) VALUES (?, ?)")
-                        .bind::<Text, _>(user_pubkey.to_string())
-                        .bind::<Bool, _>(true)
-                        .execute(conn)
-                        .expect("Failed to insert miner into database!")
-                })
-                .await;
-
-            if res.is_ok() {
-                return Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "text/text")
-                    .body("SUCCESS".to_string())
-                    .unwrap();
-            } else {
-                error!("Failed to add miner to database");
-                return Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body("Failed to add user to database".to_string())
                     .unwrap();
             }
         }
@@ -979,25 +1183,242 @@ async fn post_signup(
 }
 
 #[derive(Deserialize)]
+struct PubkeyParam {
+    pubkey: String,
+}
+
+async fn get_miner_rewards(
+    query_params: Query<PubkeyParam>,
+    Extension(app_database): Extension<Arc<AppDatabase>>,
+) -> impl IntoResponse {
+    if let Ok(user_pubkey) = Pubkey::from_str(&query_params.pubkey) {
+        let res = app_database
+            .get_miner_rewards(user_pubkey.to_string())
+            .await;
+
+        match res {
+            Ok(rewards) => {
+                let decimal_bal =
+                    rewards.balance as f64 / 10f64.powf(ore_api::consts::TOKEN_DECIMALS as f64);
+                let response = format!("{}", decimal_bal);
+                return Response::builder()
+                    .status(StatusCode::OK)
+                    .body(response)
+                    .unwrap();
+            }
+            Err(_) => {
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body("Failed to get balance".to_string())
+                    .unwrap();
+            }
+        }
+    } else {
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body("Invalid public key".to_string())
+            .unwrap();
+    }
+}
+
+async fn get_miner_balance(
+    query_params: Query<PubkeyParam>,
+    Extension(rpc_client): Extension<Arc<RpcClient>>,
+) -> impl IntoResponse {
+    if let Ok(user_pubkey) = Pubkey::from_str(&query_params.pubkey) {
+        let miner_token_account = get_associated_token_address(&user_pubkey, &get_ore_mint());
+        if let Ok(response) = rpc_client
+            .get_token_account_balance(&miner_token_account)
+            .await
+        {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .body(response.ui_amount_string)
+                .unwrap();
+        } else {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("Failed to get token account balance".to_string())
+                .unwrap();
+        }
+    } else {
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body("Invalid public key".to_string())
+            .unwrap();
+    }
+}
+
+#[derive(Deserialize)]
+struct ClaimParams {
+    pubkey: String,
+    amount: u64,
+}
+
+async fn post_claim(
+    query_params: Query<ClaimParams>,
+    Extension(app_database): Extension<Arc<AppDatabase>>,
+    Extension(rpc_client): Extension<Arc<RpcClient>>,
+    Extension(wallet): Extension<Arc<Keypair>>,
+) -> impl IntoResponse {
+    if let Ok(user_pubkey) = Pubkey::from_str(&query_params.pubkey) {
+        let amount = query_params.amount;
+        if let Ok(miner_rewards) = app_database
+            .get_miner_rewards(user_pubkey.to_string())
+            .await
+        {
+            if amount > miner_rewards.balance {
+                return Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body("claim amount exceeds miner rewards balance".to_string())
+                    .unwrap();
+            }
+
+            let ore_mint = get_ore_mint();
+            let miner_token_account = get_associated_token_address(&user_pubkey, &ore_mint);
+
+            let mut ixs = Vec::new();
+            // let prio_fee_ix = ComputeBudgetInstruction::set_compute_unit_price(10000);
+            // ixs.push(prio_fee_ix);
+            if let Ok(response) = rpc_client
+                .get_token_account_balance(&miner_token_account)
+                .await
+            {
+                if let Some(_amount) = response.ui_amount {
+                    info!("miner has valid token account.");
+                } else {
+                    info!("will create token account for miner");
+                    ixs.push(
+                        spl_associated_token_account::instruction::create_associated_token_account(
+                            &wallet.pubkey(),
+                            &user_pubkey,
+                            &ore_api::consts::MINT_ADDRESS,
+                            &spl_token::id(),
+                        ),
+                    )
+                }
+            } else {
+                info!("Adding create ata ix for miner claim");
+                ixs.push(
+                    spl_associated_token_account::instruction::create_associated_token_account(
+                        &wallet.pubkey(),
+                        &user_pubkey,
+                        &ore_api::consts::MINT_ADDRESS,
+                        &spl_token::id(),
+                    ),
+                )
+            }
+
+            let ix = ore_api::instruction::claim(wallet.pubkey(), miner_token_account, amount);
+            ixs.push(ix);
+
+            if let Ok((hash, _slot)) = rpc_client
+                .get_latest_blockhash_with_commitment(rpc_client.commitment())
+                .await
+            {
+                let mut tx = Transaction::new_with_payer(&ixs, Some(&wallet.pubkey()));
+
+                tx.sign(&[&wallet], hash);
+
+                let result = rpc_client
+                    .send_and_confirm_transaction_with_spinner_and_commitment(
+                        &tx,
+                        rpc_client.commitment(),
+                    )
+                    .await;
+                match result {
+                    Ok(sig) => {
+                        info!("Miner successfully claimed.\nSig: {}", sig.to_string());
+
+                        // TODO: use transacions, or at least put them into one query
+                        let miner = app_database
+                            .get_miner_by_pubkey_str(user_pubkey.to_string())
+                            .await
+                            .unwrap();
+                        let db_pool = app_database
+                            .get_pool_by_authority_pubkey(wallet.pubkey().to_string())
+                            .await
+                            .unwrap();
+                        let _ = app_database
+                            .decrease_miner_reward(miner.id, amount)
+                            .await
+                            .unwrap();
+                        let _ = app_database
+                            .update_pool_claimed(wallet.pubkey().to_string(), amount)
+                            .await
+                            .unwrap();
+
+                        let itxn = InsertTxn {
+                            txn_type: "claim".to_string(),
+                            signature: sig.to_string(),
+                            priority_fee: 0,
+                        };
+                        let _ = app_database.add_new_txn(itxn).await.unwrap();
+
+                        let ntxn = app_database.get_txn_by_sig(sig.to_string()).await.unwrap();
+
+                        let iclaim = InsertClaim {
+                            miner_id: miner.id,
+                            pool_id: db_pool.id,
+                            txn_id: ntxn.id,
+                            amount,
+                        };
+                        let _ = app_database.add_new_claim(iclaim).await.unwrap();
+
+                        return Response::builder()
+                            .status(StatusCode::OK)
+                            .body("SUCCESS".to_string())
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        println!("ERROR: {:?}", e);
+                        return Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .body("FAILED".to_string())
+                            .unwrap();
+                    }
+                }
+            } else {
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body("FAILED".to_string())
+                    .unwrap();
+            }
+        } else {
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body("failed to get miner account from database".to_string())
+                .unwrap();
+        }
+    } else {
+        error!("Claim with invalid pubkey");
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body("Invalid Pubkey".to_string())
+            .unwrap();
+    }
+}
+
+#[derive(Deserialize)]
 struct WsQueryParams {
     timestamp: u64,
 }
 
+#[debug_handler]
 async fn ws_handler(
     ws: WebSocketUpgrade,
     TypedHeader(auth_header): TypedHeader<axum_extra::headers::Authorization<Basic>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(app_state): State<Arc<RwLock<AppState>>>,
-    Extension(app_config): Extension<Arc<Mutex<Config>>>,
+    // Extension(app_config): Extension<Arc<Config>>,
     Extension(client_channel): Extension<UnboundedSender<ClientMessage>>,
+    Extension(app_database): Extension<Arc<AppDatabase>>,
     query_params: Query<WsQueryParams>,
 ) -> impl IntoResponse {
     let msg_timestamp = query_params.timestamp;
 
     let pubkey = auth_header.username();
     let signed_msg = auth_header.password();
-
-    // TODO: Store pubkey data in db
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1010,9 +1431,82 @@ async fn ws_handler(
     }
 
     // verify client
-    if let Ok(pubkey) = Pubkey::from_str(pubkey) {
-        if let Some(whitelist) = &app_config.lock().await.whitelist {
-            if whitelist.contains(&pubkey) {
+    if false {
+        // if let Ok(user_pubkey) = Pubkey::from_str(pubkey) {
+        //     {
+        //         let mut already_connected = false;
+        //         for (_, (socket_pubkey, _)) in app_state.read().await.sockets.iter() {
+        //             if user_pubkey == *socket_pubkey {
+        //                 already_connected = true;
+        //                 break;
+        //             }
+        //         }
+        //         if already_connected {
+        //             return Err((StatusCode::TOO_MANY_REQUESTS, "A client is already connected with that wallet"));
+        //         }
+        //     };
+
+        //     let db_miner = app_database.get_miner_by_pubkey_str(pubkey.to_string()).await;
+
+        //     let miner;
+        //     match db_miner {
+        //         Ok(db_miner) => {
+        //             miner = db_miner;
+        //         }
+        //         Err(AppDatabaseError::EntityDoesNotExist) => {
+        //             return Err((StatusCode::UNAUTHORIZED, "pubkey is not authorized to mine. please sign up."));
+        //         },
+        //         Err(_) => {
+        //             error!("Failed to get database pool connection.");
+        //             return Err((StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"));
+        //         }
+        //     }
+
+        //     if !miner.enabled {
+        //         return Err((StatusCode::UNAUTHORIZED, "pubkey is not authorized to mine"));
+        //     }
+
+        //     if let Ok(signature) = Signature::from_str(signed_msg) {
+        //         let ts_msg = msg_timestamp.to_le_bytes();
+
+        //         if signature.verify(&user_pubkey.to_bytes(), &ts_msg) {
+        //             println!("Client: {addr} connected with pubkey {pubkey}.");
+        //             return Ok(ws.on_upgrade(move |socket| handle_socket(socket, addr, user_pubkey, app_state, client_channel, miner.id)));
+        //         } else {
+        //             return Err((StatusCode::UNAUTHORIZED, "Sig verification failed"));
+        //         }
+        //     } else {
+        //         return Err((StatusCode::UNAUTHORIZED, "Invalid signature"));
+        //     }
+        // } else {
+        //     return Err((StatusCode::UNAUTHORIZED, "Invalid pubkey"));
+        // }
+
+        error!("Failed to get database pool connection, because dbms are not supported at present.");
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"));
+    } else {
+        // legacy approach
+        if let Ok(pubkey) = Pubkey::from_str(pubkey) {
+            // if let Some(whitelist) = &app_config.whitelist {
+            //     if whitelist.contains(&pubkey) {
+            //         if let Ok(signature) = Signature::from_str(signed_msg) {
+            //             let ts_msg = msg_timestamp.to_le_bytes();
+
+            //             if signature.verify(&pubkey.to_bytes(), &ts_msg) {
+            //                 println!("Client: {addr} connected with pubkey {pubkey}.");
+            //                 return Ok(ws.on_upgrade(move |socket| {
+            //                     handle_socket(socket, addr, pubkey, app_state, client_channel)
+            //                 }));
+            //             } else {
+            //                 return Err((StatusCode::UNAUTHORIZED, "Sig verification failed"));
+            //             }
+            //         } else {
+            //             return Err((StatusCode::UNAUTHORIZED, "Invalid signature"));
+            //         }
+            //     } else {
+            //         return Err((StatusCode::UNAUTHORIZED, "pubkey is not authorized to mine"));
+            //     }
+            // } else {
                 if let Ok(signature) = Signature::from_str(signed_msg) {
                     let ts_msg = msg_timestamp.to_le_bytes();
 
@@ -1027,27 +1521,10 @@ async fn ws_handler(
                 } else {
                     return Err((StatusCode::UNAUTHORIZED, "Invalid signature"));
                 }
-            } else {
-                return Err((StatusCode::UNAUTHORIZED, "pubkey is not authorized to mine"));
-            }
+            // }
         } else {
-            if let Ok(signature) = Signature::from_str(signed_msg) {
-                let ts_msg = msg_timestamp.to_le_bytes();
-
-                if signature.verify(&pubkey.to_bytes(), &ts_msg) {
-                    println!("Client: {addr} connected with pubkey {pubkey}.");
-                    return Ok(ws.on_upgrade(move |socket| {
-                        handle_socket(socket, addr, pubkey, app_state, client_channel)
-                    }));
-                } else {
-                    return Err((StatusCode::UNAUTHORIZED, "Sig verification failed"));
-                }
-            } else {
-                return Err((StatusCode::UNAUTHORIZED, "Invalid signature"));
-            }
+            return Err((StatusCode::UNAUTHORIZED, "Invalid pubkey"));
         }
-    } else {
-        return Err((StatusCode::UNAUTHORIZED, "Invalid pubkey"));
     }
 }
 
@@ -1057,15 +1534,16 @@ async fn handle_socket(
     who_pubkey: Pubkey,
     rw_app_state: Arc<RwLock<AppState>>,
     client_channel: UnboundedSender<ClientMessage>,
+    // miner_id: i32,
 ) {
     if socket
         .send(axum::extract::ws::Message::Ping(vec![1, 2, 3]))
         .await
         .is_ok()
     {
-        println!("Pinged {who}...");
+        println!("Pinged {who}... pubkey: {who_pubkey}");
     } else {
-        println!("could not ping {who}");
+        println!("could not ping {who} pubkey: {who_pubkey}");
 
         // if we can't ping we can't do anything, return to close the connection
         return;
@@ -1077,33 +1555,37 @@ async fn handle_socket(
         println!("Socket addr: {who} already has an active connection");
         return;
     } else {
+        let sender = Arc::new(Mutex::new(sender));
+        app_state.sockets.insert(who, (who_pubkey, sender.clone()));
         app_state
-            .sockets
-            .insert(who, (who_pubkey, Mutex::new(sender)));
+            .miner_sockets
+            // .insert(miner_id, (who_pubkey, sender));
+            .insert(who_pubkey, sender);
     }
     drop(app_state);
 
     let _ = tokio::spawn(async move {
-        // // MI: vanilla. by design while let will exit when None received
-        // while let Some(Ok(msg)) = receiver.next().await {
-        //     if process_message(msg, who, client_channel.clone()).is_break() {
-        //         break;
-        //     }
-        // }
-
-        // MI: use loop, since by design while let will exit when None received
-        loop {
-            if let Some(Ok(msg)) = receiver.next().await {
-                if process_message(msg, who, client_channel.clone()).is_break() {
-                    break;
-                }
+        // MI: vanilla. by design while let will exit when None received
+        while let Some(Ok(msg)) = receiver.next().await {
+            if process_message(msg, who, client_channel.clone()).is_break() {
+                break;
             }
         }
+
+        // // MI: use loop, since by design while let will exit when None received
+        // loop {
+        //     if let Some(Ok(msg)) = receiver.next().await {
+        //         if process_message(msg, who, client_channel.clone()).is_break() {
+        //             break;
+        //         }
+        //     }
+        // }
     })
     .await;
 
     let mut app_state = rw_app_state.write().await;
     app_state.sockets.remove(&who);
+    app_state.miner_sockets.remove(&who_pubkey);
     drop(app_state);
 
     info!("Client: {} disconnected!", who_pubkey.to_string());
@@ -1123,7 +1605,7 @@ fn process_message(
             let message_type = d[0];
             match message_type {
                 0 => {
-                    println!("Got Ready message");
+                    // println!("Got Ready message");
                     let mut b_index = 1;
 
                     let mut pubkey = [0u8; 32];
@@ -1232,18 +1714,81 @@ fn process_message(
     ControlFlow::Continue(())
 }
 
+async fn proof_tracking_system(ws_url: String, wallet: Arc<Keypair>, proof: Arc<Mutex<Proof>>) {
+    loop {
+        println!("Establishing rpc websocket connection...");
+        let mut ps_client = PubsubClient::new(&ws_url).await;
+        let mut attempts = 0;
+
+        while ps_client.is_err() && attempts < 3 {
+            error!("Failed to connect to websocket, retrying...");
+            ps_client = PubsubClient::new(&ws_url).await;
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            attempts += 1;
+        }
+        info!("RPC WS connection established!");
+
+        let app_wallet = wallet.clone();
+        if let Ok(ps_client) = ps_client {
+            // The `PubsubClient` must be `Arc`ed to share it across threads/tasks.
+            let ps_client = Arc::new(ps_client);
+            let app_proof = proof.clone();
+            let account_pubkey = proof_pubkey(app_wallet.pubkey());
+            let pubsub = ps_client
+                .account_subscribe(
+                    &account_pubkey,
+                    Some(RpcAccountInfoConfig {
+                        encoding: Some(UiAccountEncoding::Base64),
+                        data_slice: None,
+                        commitment: Some(CommitmentConfig::confirmed()),
+                        min_context_slot: None,
+                    }),
+                )
+                .await;
+
+            info!("Subscribed tracking pool proof updates with websocket");
+            if let Ok((mut account_sub_notifications, _account_unsub)) = pubsub {
+                while let Some(response) = account_sub_notifications.next().await {
+                    let data = response.value.data.decode();
+                    if let Some(data_bytes) = data {
+                        // if let Ok(bus) = Bus::try_from_bytes(&data_bytes) {
+                        //     let _ = sender.send(AccountUpdatesData::BusData(*bus));
+                        // }
+                        // if let Ok(ore_config) = ore_api::state::Config::try_from_bytes(&data_bytes) {
+                        //     let _ = sender.send(AccountUpdatesData::TreasuryConfigData(*ore_config));
+                        // }
+                        if let Ok(new_proof) = Proof::try_from_bytes(&data_bytes) {
+                            // let _ = sender.send(AccountUpdatesData::ProofData(*proof));
+                            //
+                            {
+                                let mut app_proof = app_proof.lock().await;
+                                *app_proof = *new_proof;
+                                drop(app_proof);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 async fn client_message_handler_system(
     mut receiver_channel: UnboundedReceiver<ClientMessage>,
     shared_state: &Arc<RwLock<AppState>>,
+    app_database: Arc<AppDatabase>,
+    _virtual_database: Arc<DashMap<Pubkey, InsertSubmission>>,
+    epoch_hashes: Arc<RwLock<EpochHashes>>,
     ready_clients: Arc<Mutex<HashSet<SocketAddr>>>,
     proof: Arc<Mutex<Proof>>,
-    epoch_hashes: Arc<RwLock<EpochHashes>>,
+    client_nonce_ranges: Arc<RwLock<HashMap<Pubkey, Range<u64>>>>,
     min_difficulty: u32,
+    powered_by_dbms: bool,
 ) {
     while let Some(client_message) = receiver_channel.recv().await {
         match client_message {
             ClientMessage::Ready(addr) => {
-                println!("Client {} is ready!", addr.to_string());
+                info!("Client {} is ready!", addr.to_string());
                 {
                     let shared_state = shared_state.read().await;
                     if let Some(sender) = shared_state.sockets.get(&addr) {
@@ -1270,33 +1815,74 @@ async fn client_message_handler_system(
             }
             ClientMessage::BestSolution(_addr, solution, pubkey) => {
                 let pubkey_str = pubkey.to_string();
+                // let challenge = app_database.get_latest_challenge().await.unwrap();
+                // let challenge = virtual_database.get_latest_challenge().await.unwrap();
                 let challenge = {
                     let proof = proof.lock().await;
                     proof.challenge
                 };
 
+                let nonce_range: Range<u64> = {
+                    if let Some(nr) = client_nonce_ranges.read().await.get(&pubkey) {
+                        nr.clone()
+                    } else {
+                        error!("Client nonce range not set!");
+                        continue;
+                    }
+                };
+
+                let nonce = u64::from_le_bytes(solution.n);
+
+                if !nonce_range.contains(&nonce) {
+                    error!("Client submitted nonce out of assigned range");
+                    continue;
+                }
+
                 if solution.is_valid(&challenge) {
                     let diff = solution.to_hash().difficulty();
-                    println!("{} found diff: {}", pubkey_str, diff);
+                    info!("{} found diff: {}", pubkey_str, diff);
                     // if diff >= MIN_DIFF {
                     if diff >= min_difficulty {
                         // calculate rewards
-                        // MI
-                        let hashpower = MIN_HASHPOWER * 2u64.pow(diff - MIN_DIFF);
-                        // let hashpower = MIN_HASHPOWER * 2u64.pow(diff - min_difficulty);
-                        {
-                            let mut epoch_hashes = epoch_hashes.write().await;
-                            epoch_hashes.submissions.insert(pubkey, (diff, hashpower));
-                            if diff > epoch_hashes.best_hash.difficulty {
-                                epoch_hashes.best_hash.difficulty = diff;
-                                epoch_hashes.best_hash.solution = Some(solution);
+                        if powered_by_dbms {
+                            info!("CHALLENGE: {:?}", challenge);
+
+                            // let miner = virtual_database.get_miner_by_pubkey_str(pubkey_str).await.unwrap();
+
+                            // let new_submission = InsertSubmission {
+                            //     miner_id: miner.id,
+                            //     challenge_id: challenge.id,
+                            //     digest: Some(solution.d.to_vec()),
+                            //     nonce,
+                            //     difficulty: diff as i8,
+                            // };
+
+                            // info!("NEW SUBMISSION: {:?}", new_submission);
+                            // let _ = app_database.add_new_submission(new_submission).await.unwrap();
+                        } else {
+                            // MI
+                            // let hashpower = MIN_HASHPOWER * 2u64.pow(diff - min_difficulty);
+                            let hashpower = MIN_HASHPOWER * 2u64.pow(diff - MIN_DIFF);
+
+                            {
+                                let mut epoch_hashes = epoch_hashes.write().await;
+                                epoch_hashes.submissions.insert(pubkey, (diff, hashpower));
+                                if diff > epoch_hashes.best_hash.difficulty {
+                                    epoch_hashes.best_hash.difficulty = diff;
+                                    epoch_hashes.best_hash.solution = Some(solution);
+                                }
                             }
                         }
                     } else {
-                        println!("Diff too low, skipping");
+                        error!("Diff too low, skipping");
                     }
                 } else {
-                    println!("{} returned an invalid solution!", pubkey);
+                    error!(
+                        "{} returned a solution which is invalid for the latest challenge!",
+                        pubkey
+                    );
+                    // MI: return will stop this spawned thread and stop mining process
+                    // return;
                 }
             }
         }
@@ -1337,9 +1923,9 @@ async fn ping_check_system(shared_state: &Arc<RwLock<AppState>>) {
 }
 
 fn styles() -> Styles {
-	Styles::styled()
-		.header(AnsiColor::Red.on_default() | Effects::BOLD)
-		.usage(AnsiColor::Red.on_default() | Effects::BOLD)
-		.literal(AnsiColor::Blue.on_default() | Effects::BOLD)
-		.placeholder(AnsiColor::Green.on_default())
+    Styles::styled()
+        .header(AnsiColor::Red.on_default() | Effects::BOLD)
+        .usage(AnsiColor::Red.on_default() | Effects::BOLD)
+        .literal(AnsiColor::Blue.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Green.on_default())
 }
