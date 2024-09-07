@@ -8,11 +8,11 @@
 
 ## Key Differentiators of the Private Pool
 
-**Simplified and lightweighted.**
+**Simplified and lightweight.**
 
-**Optimized for private and/or personal use.**
+**Optimized for home and/or personal use.**
 
-**Zero charge for computing client, mining tx fee only for pool server.**
+**Zero fee charge for computing client, mining tx fee only for pool server.**
 
 **No delegate.**
 
