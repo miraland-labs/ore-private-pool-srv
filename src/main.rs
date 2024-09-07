@@ -282,7 +282,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
 		.unwrap();
 
-	let file_appender = tracing_appender::rolling::daily("./logs", "ore-hq-server.log");
+	let file_appender = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
 	let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 	tracing_subscriber::fmt().with_env_filter(filter_layer).with_writer(non_blocking).init();
 
