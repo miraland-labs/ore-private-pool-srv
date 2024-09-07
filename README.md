@@ -1,10 +1,12 @@
 # Yolo and Solo Your Private Pool for ORE Mining
 
-**This is pool server. Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git). Tailored by Miraland Labs.**
+**The goal of this project is to balance the ever-growing public pool and decentralize computing power, in line with the ORE design principle: anyone can mine. As expected, more individual miners.**
+
+**This is private pool server. Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git). Tailored by Miraland Labs.**
 
 A lightweight release of Ore mining private pool server. Derived from and credited to ore-hq-server.
 
-## Key Differentiators
+## Key Differentiators of the Private Pool
 
 **Simplified and lightweighted.**
 
@@ -24,7 +26,7 @@ A lightweight release of Ore mining private pool server. Derived from and credit
 
 ## Install
 
-To install the CLI, 2 approaches are recommended:
+To install the private pool server, 2 approaches are recommended:
 
 **Approach One**: install from crates.io directly, use [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 
@@ -90,7 +92,7 @@ ore-ppl-srv [OPTIONS]
 ```
 
 or, if you build from source code downloaded from github, enter into ore-private-pool-srv home directory,
-duplicate `bin.example` directory and rename to `bin`, modify `start-ore-ppl-srv.sh`, execute:
+duplicate `bin.example` directory and rename to `bin`, modify settings in `start-ore-ppl-srv.sh`, execute:
 
 ```
 bin/start-ore-ppl-srv.sh
@@ -115,48 +117,27 @@ Usage: ore-ppl-srv [OPTIONS]
 
 Options:
 -b, --buffer-time <BUFFER_SECONDS>
-
-The number seconds before the deadline to stop mining and start submitting. [default: 5]
-
+        The number seconds before the deadline to stop mining and start submitting. [default: 5]
 -r, --risk-time <RISK_SECONDS>
-
-Set extra hash time in seconds for miners to stop mining and start submitting, risking a penalty. [default: 0]
-
+        Set extra hash time in seconds for miners to stop mining and start submitting, risking a penalty. [default: 0]
 --priority-fee <FEE_MICROLAMPORTS>
-
-Price to pay for compute units when dynamic fee flag is off, or dynamic fee is unavailable. [default: 100]
-
+        Price to pay for compute units when dynamic fee flag is off, or dynamic fee is unavailable. [default: 100]
 --priority-fee-cap <FEE_CAP_MICROLAMPORTS>
-
-Max price to pay for compute units when dynamic fees are enabled. [default: 100000]
-
+        Max price to pay for compute units when dynamic fees are enabled. [default: 100000]
 --dynamic-fee
-
-Enable dynamic priority fees
-
+        Enable dynamic priority fees
 --dynamic-fee-url <DYNAMIC_FEE_URL>
-
-RPC URL to use for dynamic fee estimation.
-
+        RPC URL to use for dynamic fee estimation.
 -e, --expected-min-difficulty <EXPECTED_MIN_DIFFICULTY>
-
-The expected min difficulty to submit from pool client. Reserved for potential qualification process unimplemented yet. [default: 8]
-
+        The expected min difficulty to submit from pool client. Reserved for potential qualification process unimplemented yet. [default: 8]
 -e, --extra-fee-difficulty <EXTRA_FEE_DIFFICULTY>
-
-The min difficulty that the pool server miner thinks deserves to pay more priority fee to land tx quickly. [default: 29]
-
+        The min difficulty that the pool server miner thinks deserves to pay more priority fee to land tx quickly. [default: 29]
 -e, --extra-fee-percent <EXTRA_FEE_PERCENT>
-
-The extra percentage that the pool server miner feels deserves to pay more of the priority fee. As a percentage, a multiple of 50 is recommended(example: 50, means pay extra 50% of the specified priority fee), and the final priority fee cannot exceed the priority fee cap. [default: 0]
-
+        The extra percentage that the pool server miner feels deserves to pay more of the priority fee. As a percentage, a multiple of 50 is recommended(example: 50, means pay extra 50% of the specified priority fee), and the final priority fee cannot exceed the priority fee cap. [default: 0]
 -s, --slack-difficulty <SLACK_DIFFICULTY>
-
-The min difficulty that will notify slack channel(if configured) upon transaction success. [default: 25]
-
+        The min difficulty that will notify slack channel(if configured) upon transaction success. [default: 25]
 --no-sound-notification
-
-Sound notification on by default
+        Sound notification on by default
 ```
 
 ## Support us | Donate at your discretion
