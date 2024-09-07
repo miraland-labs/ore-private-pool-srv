@@ -1,27 +1,45 @@
-# ORE mining private pool server
+# Yolo and Solo Your Private Pool Server for ORE Mining
 
 Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git). Tailored by Miraland Labs.
 
-A lightweight release of Ore mining private pool server. derived from and credited to ore-hq-server.
+A lightweight release of Ore mining private pool server. Derived from and credited to ore-hq-server.
 
 ## Key Differentiators
 
-Simplified and lightweighted.
-Optimized for private and/or personal use.
-Zero charge for computing client, mining tx fee only for pool server.
-No delegate.
-No database.
-Scale from a few to tens of devices, either laptop or PC.
-balance between worse penalties and better rewards.
-Easy setup and flexible home deployment.
+### Simplified and lightweighted.
+
+### Optimized for private and/or personal use.
+
+### Zero charge for computing client, mining tx fee only for pool server.
+
+### No delegate.
+
+### No database.
+
+### Scale from a few to tens of devices, either laptop or PC.
+
+### Balance between worse penalties and better rewards.
+
+### Easy setup and flexible home deployment.
 
 ## Install
 
-To install the CLI, use [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
+To install the CLI, 2 approaches are recommended:
+Approach One: install from crates.io directly, use [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 
 ```sh
 cargo install ore-private-pool-srv
 ```
+
+Approach Two: download source code from Github at: [github](https://github.com/miraland-labs/ore-private-pool-srv):
+
+```sh
+https://github.com/miraland-labs/ore-private-pool-srv
+```
+
+and then compile locally
+
+`cargo build --release`
 
 ### Dependencies
 
@@ -64,17 +82,26 @@ copy `.env.example` file and rename to `.env`, set with your own settings.
 
 ## Run
 
-For pool server, execute:
+To run pool server, execute:
 
 ```sh
 ore-ppl-srv [OPTIONS]
 ```
 
-or, just copy and modify `start-ore-ppl-srv.sh` under `bin.example` directory, execute:
+or, if you build from source code downloaded from github, enter into ore-private-pool-srv home directory,
+duplicate `bin.example` directory and rename to `bin`, modify `start-ore-ppl-srv.sh`, execute:
 
 ```
-start-ore-ppl-srv.sh
+bin/start-ore-ppl-srv.sh
 ```
+
+or
+
+```
+RUST_LOG=none,ore_ppl_srv=info bin/start-ore-ppl-srv.sh
+```
+
+you will find daily log file in `logs` sub directory.
 
 ## Help
 
