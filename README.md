@@ -1,10 +1,10 @@
 # Yolo and Solo Your Private Pool for ORE Mining
 
-**The goal of this project is to balance the ever-growing public pool and decentralize computing power, in line with the ORE design principle: anyone can mine. As expected, more individual miners.**
+**The goal of this project is to balance the ever-growing public pools and decentralize computing power, in line with the ORE design principle: anyone can mine. As expected, more individual miners.**
 
-**This is private pool server. Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git). Tailored by Miraland Labs.**
+**This is private pool server. Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git).**
 
-A lightweight release of Ore mining private pool server. Derived from and credited to ore-hq-server.
+**It's tailored by Miraland Labs as a lightweight release, derived from and credited to ore-hq-server.**
 
 ## Key Differentiators of the Private Pool
 
