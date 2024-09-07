@@ -51,7 +51,15 @@ If you run into issues during installation, please install the following depende
 #### Linux
 
 ```
+sudo apt-get update
 sudo apt-get install openssl pkg-config libssl-dev
+```
+
+Notes: you may need to install dependencies to enable sound notification on ubuntu OS with:
+
+```
+sudo apt-get install libasound2-dev
+sudo apt-get install libudev-dev
 ```
 
 #### MacOS (using [Homebrew](https://brew.sh/))
