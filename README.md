@@ -4,7 +4,7 @@
 
 **This is private pool server. Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git).**
 
-**It's tailored by Miraland Labs as a lightweight release, derived from and credited to ore-hq-server.**
+It's tailored by Miraland Labs as a lightweight release, **derived from and credited to ore-hq-server.**
 
 ## Key Differentiators of the Private Pool
 
