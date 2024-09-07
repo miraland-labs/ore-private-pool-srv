@@ -6,32 +6,33 @@ A lightweight release of Ore mining private pool server. Derived from and credit
 
 ## Key Differentiators
 
-### Simplified and lightweighted.
+**Simplified and lightweighted.**
 
-### Optimized for private and/or personal use.
+**Optimized for private and/or personal use.**
 
-### Zero charge for computing client, mining tx fee only for pool server.
+**Zero charge for computing client, mining tx fee only for pool server.**
 
-### No delegate.
+**No delegate.**
 
-### No database.
+**No database.**
 
-### Scale from a few to tens of devices, either laptop or PC.
+**Scale from a few to tens of devices, either laptop or PC.**
 
-### Balance between worse penalties and better rewards.
+**Balance between worse penalties and better rewards.**
 
-### Easy setup and flexible home deployment.
+**Easy setup and flexible home deployment.**
 
 ## Install
 
 To install the CLI, 2 approaches are recommended:
-Approach One: install from crates.io directly, use [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
+
+**Approach One**: install from crates.io directly, use [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 
 ```sh
 cargo install ore-private-pool-srv
 ```
 
-Approach Two: download source code from Github at: [github](https://github.com/miraland-labs/ore-private-pool-srv):
+**Approach Two**: download source code from Github at: [github](https://github.com/miraland-labs/ore-private-pool-srv):
 
 ```sh
 https://github.com/miraland-labs/ore-private-pool-srv
@@ -115,29 +116,50 @@ Usage: ore-ppl-srv [OPTIONS]
 
 Options:
 -b, --buffer-time <BUFFER_SECONDS>
+
 The number seconds before the deadline to stop mining and start submitting. [default: 5]
+
 -r, --risk-time <RISK_SECONDS>
+
 Set extra hash time in seconds for miners to stop mining and start submitting, risking a penalty. [default: 0]
+
 --priority-fee <FEE_MICROLAMPORTS>
+
 Price to pay for compute units when dynamic fee flag is off, or dynamic fee is unavailable. [default: 100]
+
 --priority-fee-cap <FEE_CAP_MICROLAMPORTS>
+
 Max price to pay for compute units when dynamic fees are enabled. [default: 100000]
+
 --dynamic-fee
+
 Enable dynamic priority fees
+
 --dynamic-fee-url <DYNAMIC_FEE_URL>
+
 RPC URL to use for dynamic fee estimation.
+
 -e, --expected-min-difficulty <EXPECTED_MIN_DIFFICULTY>
+
 The expected min difficulty to submit from pool client. Reserved for potential qualification process unimplemented yet. [default: 8]
+
 -e, --extra-fee-difficulty <EXTRA_FEE_DIFFICULTY>
+
 The min difficulty that the pool server miner thinks deserves to pay more priority fee to land tx quickly. [default: 29]
+
 -e, --extra-fee-percent <EXTRA_FEE_PERCENT>
+
 The extra percentage that the pool server miner feels deserves to pay more of the priority fee. As a percentage, a multiple of 50 is recommended(example: 50, means pay extra 50% of the specified priority fee), and the final priority fee cannot exceed the priority fee cap. [default: 0]
+
 -s, --slack-difficulty <SLACK_DIFFICULTY>
+
 The min difficulty that will notify slack channel(if configured) upon transaction success. [default: 25]
+
 --no-sound-notification
+
 Sound notification on by default
 
-## Support Us | Donate at your discretion
+## Support us | Donate at your discretion
 
 We greatly appreciate any donation to help support projects development at Miraland Labs. Miraland is dedicated to freedom and individual sovereignty and we are doing our best to make it a reality.
 Certainly, if you find this project helpful and would like to support its development, you can buy me/us a coffee!
