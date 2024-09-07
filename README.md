@@ -1,6 +1,6 @@
-# Yolo and Solo Your Private Pool Server for ORE Mining
+# Yolo and Solo Your Private Pool for ORE Mining
 
-Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git). Tailored by Miraland Labs.
+**This is pool server. Forked from [ore-hq-server](https://github.com/Kriptikz/ore-hq-server.git). Tailored by Miraland Labs.**
 
 A lightweight release of Ore mining private pool server. Derived from and credited to ore-hq-server.
 
@@ -110,7 +110,6 @@ You can use the `-h` flag on any command to pull up a help menu with documentati
 
 ```sh
 ore-ppl-srv -h
-```
 
 Usage: ore-ppl-srv [OPTIONS]
 
@@ -158,6 +157,7 @@ The min difficulty that will notify slack channel(if configured) upon transactio
 --no-sound-notification
 
 Sound notification on by default
+```
 
 ## Support us | Donate at your discretion
 
