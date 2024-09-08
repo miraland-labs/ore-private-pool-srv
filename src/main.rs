@@ -314,7 +314,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let wallet_path = Path::new(&wallet_path_str);
 
 	if !wallet_path.exists() {
-		tracing::error!("Failed to load wallet at: {}", wallet_path_str);
+		tracing::error!("❌ Failed to load wallet at: {}", wallet_path_str);
 		return Err("Failed to find wallet path.".into());
 	}
 
@@ -644,7 +644,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 									);
 
 									if !best_solution.is_valid(&loaded_proof.challenge) {
-										error!("SOLUTION IS NOT VALID ANYMORE!");
+										error!("❌ SOLUTION IS NOT VALID ANYMORE!");
 										break;
 									}
 
@@ -793,7 +793,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 										Ok(sig) => {
 											// success
 											success = true;
-											info!("Success!!");
+											info!("✅ Success!!");
 											info!("Sig: {}", sig);
 
 											if !*app_no_sound_notification {
@@ -913,7 +913,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                                 continue;
                                                             }
                                                             e if e == OreError::HashInvalid as u32 => {
-                                                                error!("Ore: The provided hash is invalid. See you next solution.");
+                                                                error!("❌ Ore: The provided hash is invalid. See you next solution.");
 
                                                                 // break for (0..SUBMIT_LIMIT), re-enter outer loop to restart
                                                                 break;
@@ -951,7 +951,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 							}
 						}
 						if !success {
-							error!("Failed to submit tx... either reached {SUBMIT_LIMIT} attempts or ix error or invalid solution.");
+							error!("❌ Failed to submit tx... either reached {SUBMIT_LIMIT} attempts or ix error or invalid solution.");
 							info!("Discarding and refreshing data...");
 							info!("refresh proof");
 							if let Ok(refreshed_proof) = get_proof(&rpc_client, wallet_pubkey).await
@@ -1524,7 +1524,7 @@ async fn client_message_handler_system(
 						let nonce = u64::from_le_bytes(solution.n);
 
 						if !nonce_range.contains(&nonce) {
-							error!("Client submitted nonce out of assigned range");
+							error!("❌ Client submitted nonce out of assigned range");
 							return;
 						}
 
@@ -1541,7 +1541,7 @@ async fn client_message_handler_system(
 						if solution.is_valid(&challenge) {
 							let diff = solution.to_hash().difficulty();
 							info!(
-								"{} found diff: {} at {}",
+								"✨ {} found diff: {} at {} ✨",
 								// pubkey_str,
 								short_pbukey_str,
 								diff,
