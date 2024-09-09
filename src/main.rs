@@ -1669,9 +1669,21 @@ async fn slack_messaging(
         url::Url::parse(&slack_webhook).expect("Failed to parse slack webhook url");
     let message = SlackChannelMessage::builder().text(text).build();
     let req = reqwest::Client::new().post(slack_webhook_url).json(&message);
-    if let Err(err) = req.send().await {
-        // eprintln!("{}", err);
-        error!("{}", err);
+    let mut num_retries = 0;
+    loop {
+        if let Err(err) = req.try_clone().unwrap().send().await {
+            // eprintln!("{}", err);
+            error!("{}", err);
+            if num_retries < 3 {
+                info!("retry...");
+                num_retries += 1;
+                tokio::time::sleep(Duration::from_millis(1_000)).await;
+                continue;
+            } else {
+                warn!("Failed 3 attempts to send message to slack. No more retry.");
+            }
+        }
+        break;
     }
 }
 
