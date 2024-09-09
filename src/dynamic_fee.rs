@@ -1,14 +1,13 @@
-use ore_api::consts::BUS_ADDRESSES;
-use reqwest::Client;
-use serde_json::{json, Value};
-
-use solana_sdk::pubkey::Pubkey;
-use std::{collections::HashMap, str::FromStr};
-use tracing::warn;
-
-use solana_client::{nonblocking::rpc_client::RpcClient, rpc_response::RpcPrioritizationFee};
-
-use url::Url;
+use {
+    ore_api::consts::BUS_ADDRESSES,
+    reqwest::Client,
+    serde_json::{json, Value},
+    solana_client::{nonblocking::rpc_client::RpcClient, rpc_response::RpcPrioritizationFee},
+    solana_sdk::pubkey::Pubkey,
+    std::{collections::HashMap, str::FromStr},
+    tracing::warn,
+    url::Url,
+};
 
 pub const DEFAULT_PRIORITY_FEE: u64 = 10_000;
 
@@ -33,11 +32,7 @@ pub async fn dynamic_fee(
     };
 
     // Select fee estiamte strategy
-    let host = Url::parse(&rpc_url)
-        .unwrap()
-        .host_str()
-        .unwrap()
-        .to_string();
+    let host = Url::parse(&rpc_url).unwrap().host_str().unwrap().to_string();
     let strategy = if host.contains("helius-rpc.com") {
         FeeStrategy::Helius
     } else if host.contains("alchemy.com") {
@@ -148,7 +143,7 @@ pub async fn dynamic_fee(
                 Some(((fees.iter().sum::<u64>() as f32 / fees.len() as f32).ceil() * 1.2) as u64)
             })
             .ok_or_else(|| format!("Failed to parse priority fee response: {:?}", response)),
-        FeeStrategy::Triton => {
+        FeeStrategy::Triton =>
             serde_json::from_value::<Vec<RpcPrioritizationFee>>(response["result"].clone())
                 .map(|prioritization_fees| {
                     estimate_prioritization_fee_micro_lamports(prioritization_fees)
@@ -157,8 +152,7 @@ pub async fn dynamic_fee(
                     Err(format!(
                         "Failed to parse priority fee response: {response:?}, error: {error}"
                     ))
-                })
-        }
+                }),
         FeeStrategy::LOCAL => local_dynamic_fee(rpc_client)
             .await
             .or_else(|err| Err(format!("Failed to parse priority fee response: {err}"))),
@@ -175,7 +169,7 @@ pub async fn dynamic_fee(
                 // Ok(fee + 5000)
                 Ok(fee)
             }
-        }
+        },
     }
 }
 
@@ -236,11 +230,7 @@ pub fn estimate_prioritization_fee_micro_lamports(
         .into_iter()
         .rev()
         .take(20)
-        .map(
-            |RpcPrioritizationFee {
-                 prioritization_fee, ..
-             }| prioritization_fee,
-        )
+        .map(|RpcPrioritizationFee { prioritization_fee, .. }| prioritization_fee)
         .collect::<Vec<_>>();
     if prioritization_fees.is_empty() {
         panic!("Response does not contain any prioritization fees");
