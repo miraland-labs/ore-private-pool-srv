@@ -279,7 +279,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             exists_slack_webhook = true;
             slack_webhook = val;
         },
-        Err(e) => println!("couldn't interpret {key}: {e}"),
+        // Err(e) => println!("couldn't interpret {key}: {e}"),
+        Err(e) => warn!("couldn't interpret {key}: {e}. slack messaging service unvailable."),
     }
 
     let mut exists_discord_webhook = false;
@@ -290,7 +291,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             exists_discord_webhook = true;
             discord_webhook = val;
         },
-        Err(e) => println!("couldn't interpret {key}: {e}"),
+        // Err(e) => println!("couldn't interpret {key}: {e}"),
+        Err(e) => warn!("couldn't interpret {key}: {e}. discord messaging service unvailable."),
     }
 
     let priority_fee = Arc::new(args.priority_fee);
