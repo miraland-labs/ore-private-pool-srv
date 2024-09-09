@@ -339,6 +339,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Sol balance is too low!".into());
     }
 
+    // MI
+    let proof_pubkey = proof_pubkey(wallet_pubkey);
+    info!("PROOF ADDRESS: {:?}", proof_pubkey);
     let proof = if let Ok(loaded_proof) = get_proof(&rpc_client, wallet_pubkey).await {
         info!("LOADED PROOF: \n{:?}", loaded_proof);
         loaded_proof
