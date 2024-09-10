@@ -1,6 +1,6 @@
 clear
 # Path to .env
-$envFilePath = "D:\ore-private-pool-rewritten\target\release\.env"
+$envFilePath = "$HOME\miner\ore-private-pool-srv\target\release\.env"
 
 # Check if the file exists
 if (Test-Path $envFilePath) {
@@ -35,9 +35,9 @@ Write-Host "DISCORD:`t$([System.Environment]::GetEnvironmentVariable('DISCORD_WE
 $null = Read-Host 'To continue press ENTER'
 cls
 # Path to ore-ppl-srv
-$SRV = "$HOME/miner/ore-private-pool-srv/target/release/ore-ppl-srv"
+$SRV = "$HOME\miner\ore-private-pool-srv\target\release\ore-ppl-srv"
 Path to wallet
-$MKP="$HOME/.config/solana/id.json"
+$MKP="$HOME\.config\solana\id.json"
 
 # Default dynamic fee URL. Uncomment next line if you plan to enable dynamic-fee mode
 $DYNAMIC_FEE_URL = "YOUR_RPC_URL_HERE"
