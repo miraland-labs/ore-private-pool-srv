@@ -13,6 +13,7 @@ use {
     },
     axum_extra::{headers::authorization::Basic, TypedHeader},
     base64::{prelude::BASE64_STANDARD, Engine},
+    bitflags::bitflags,
     chrono::Local,
     clap::{
         builder::{
@@ -132,6 +133,16 @@ pub struct EpochHashes {
 pub struct BestHash {
     solution: Option<Solution>,
     difficulty: u32,
+}
+
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct MessagingFlags: u8 {
+        const SLACK   = 1 << 0;
+        const DISCORD = 1 << 1;
+        // const EMAIL   = 1 << 2;
+    }
 }
 
 pub struct DifficultyPayload {
@@ -270,6 +281,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let slack_webhook = std::env::var("SLACK_WEBHOOK").expect("SLACK_WEBHOOK must be set.");
     // let discord_webhook = std::env::var("DISCORD_WEBHOOK").expect("DISCORD_WEBHOOK must be set.");
 
+    //TODO: further verify those webhook existences are valid
     let mut exists_slack_webhook = false;
     let mut slack_webhook = String::new();
 
@@ -293,6 +305,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         // Err(e) => println!("couldn't interpret {key}: {e}"),
         Err(e) => warn!("couldn't interpret {key}: {e}. discord messaging service unvailable."),
+    }
+
+    let mut messaging_flags = MessagingFlags::empty();
+    if exists_slack_webhook {
+        messaging_flags |= MessagingFlags::SLACK;
+    }
+    if exists_discord_webhook {
+        messaging_flags |= MessagingFlags::DISCORD;
     }
 
     let priority_fee = Arc::new(args.priority_fee);
@@ -442,7 +462,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::sync::mpsc::unbounded_channel::<RewardsMessage>();
 
     // if exists slack webhook, handle slack messages to send
-    if exists_slack_webhook {
+    // if exists_slack_webhook {
+    if messaging_flags.contains(MessagingFlags::SLACK) {
         tokio::spawn(async move {
             notification::slack_messaging_system(slack_webhook, slack_message_receiver).await;
         });
@@ -453,7 +474,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::sync::mpsc::unbounded_channel::<RewardsMessage>();
 
     // if exists discord webhook, handle discord messages to send
-    if exists_discord_webhook {
+    // if exists_discord_webhook {
+    if messaging_flags.contains(MessagingFlags::DISCORD) {
         tokio::spawn(async move {
             notification::discord_messaging_system(discord_webhook, discord_message_receiver).await;
         });
@@ -920,7 +942,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                     if difficulty.ge(&*slack_difficulty)
                                                         || difficulty.ge(&*messaging_diff)
                                                     {
-                                                        if exists_slack_webhook {
+                                                        // if exists_slack_webhook {
+                                                        if messaging_flags
+                                                            .contains(MessagingFlags::SLACK)
+                                                        {
                                                             let _ = slack_message_sender.send(
                                                                 RewardsMessage::Rewards(
                                                                     difficulty,
@@ -930,7 +955,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                             );
                                                         }
 
-                                                        if exists_discord_webhook {
+                                                        // if exists_discord_webhook {
+                                                        if messaging_flags
+                                                            .contains(MessagingFlags::DISCORD)
+                                                        {
                                                             let _ = discord_message_sender.send(
                                                                 RewardsMessage::Rewards(
                                                                     difficulty,

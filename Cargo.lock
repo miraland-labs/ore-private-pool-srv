@@ -3240,6 +3240,7 @@ dependencies = [
  "axum-extra",
  "base64 0.22.1",
  "bincode",
+ "bitflags 2.6.0",
  "cached",
  "chrono",
  "clap 4.5.17",
