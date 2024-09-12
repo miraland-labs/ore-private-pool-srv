@@ -22,12 +22,15 @@ use {
         },
         command, Parser,
     },
+    database::{Database, DatabaseError, PoweredByDbms, PoweredByParams},
+    deadpool_sqlite::{Config, Runtime},
     drillx::Solution,
     dynamic_fee as pfee,
     futures::{stream::SplitSink, SinkExt, StreamExt},
     notification::RewardsMessage,
     ore_api::{consts::BUS_COUNT, error::OreError, state::Proof},
     rand::Rng,
+    rusqlite::Connection,
     serde::Deserialize,
     solana_account_decoder::UiAccountEncoding,
     solana_client::{
@@ -47,6 +50,7 @@ use {
     solana_transaction_status::UiTransactionEncoding,
     std::{
         collections::{HashMap, HashSet},
+        fs,
         net::SocketAddr,
         ops::{ControlFlow, Div, Range},
         path::Path,
@@ -75,7 +79,9 @@ use {
     },
 };
 
+mod database;
 mod dynamic_fee;
+mod models;
 mod notification;
 mod utils;
 
@@ -278,8 +284,89 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set.");
     let rpc_ws_url = std::env::var("RPC_WS_URL").expect("RPC_WS_URL must be set.");
 
-    // let slack_webhook = std::env::var("SLACK_WEBHOOK").expect("SLACK_WEBHOOK must be set.");
-    // let discord_webhook = std::env::var("DISCORD_WEBHOOK").expect("DISCORD_WEBHOOK must be set.");
+    let mut powered_by_dbms = PoweredByDbms::Unavailable;
+    let key = "POWERED_BY_DBMS";
+    match std::env::var(key) {
+        Ok(val) => {
+            powered_by_dbms =
+                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly.");
+        },
+        Err(e) => {},
+    }
+
+    let database_uri: String;
+    let key = "DATABASE_URL";
+    match std::env::var(key) {
+        Ok(val) => {
+            database_uri = val;
+        },
+        Err(_) => database_uri = String::from("ore_priv_pool.db.sqlite3"),
+    }
+
+    let mut dbms_settings = PoweredByParams {
+        // default to "db/ore_priv_pool.db.sqlite3"
+        database_uri: &database_uri,
+        initialized: false,
+        corrupted: false,
+        // connection: None,
+    };
+
+    if powered_by_dbms == PoweredByDbms::Sqlite {
+        info!("Powered by {} detected.", powered_by_dbms);
+        // First, let's check if db file exist or not
+        if !utils::exists_file(&dbms_settings.database_uri) {
+            error!(
+                "No existing database! New database will be created in the path: {}",
+                dbms_settings.database_uri
+            );
+        } else {
+            info!(
+                "The ore private pool db is already in place: {}. Opening...",
+                dbms_settings.database_uri
+            );
+            dbms_settings.initialized = true;
+        }
+        // Second, we try to open a database connection.
+        let conn = match Connection::open(dbms_settings.database_uri) {
+            Ok(conn) => conn,
+            Err(e) => {
+                error!("Error connecting to database: {}.", e);
+                return Err("Failed to connect to database.".into());
+            },
+        };
+
+        // initialization check
+        if !dbms_settings.initialized {
+            info!("Initializing database...");
+            // execute db init sql scripts
+            // let command = fs::read_to_string("migrations/sqlite/init.sql").unwrap();
+            let command = include_str!("../migrations/sqlite/init.sql");
+            // conn.execute_batch(&command).unwrap();
+            if let Err(e) = conn.execute_batch(&command) {
+                error!("Error occurred during db initialization: {}", e);
+                return Err("Failed during db initialization.".into());
+            }
+            dbms_settings.initialized = true;
+            info!("Initialization completed.");
+        }
+
+        // retrive initialization completed flag
+        let mut stmt =
+            conn.prepare("SELECT id FROM init_completion WHERE init_completed = true")?;
+        dbms_settings.corrupted = !stmt.exists([]).unwrap();
+
+        // db file corruption check
+        if dbms_settings.corrupted {
+            error!("ore private pool db file corrupted.");
+            return Err("ore private pool db file corrupted.".into());
+        }
+    }
+
+    // MI
+    // let mut db_config = Config::new(database_uri);
+    // let connection_pool = db_config.create_pool(Runtime::Tokio1).unwrap();
+    // let conn = connection_pool.get().await.unwrap();
+    let database = Arc::new(Database::new(dbms_settings.database_uri.to_string()));
 
     //TODO: further verify those webhook existences are valid
     let mut exists_slack_webhook = false;
@@ -401,6 +488,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         proof
     };
+
+    if powered_by_dbms == PoweredByDbms::Sqlite {
+        info!("Check if the mining pool record exists in the database");
+        let mining_pool = database.get_pool_by_authority_pubkey(wallet_pubkey.to_string()).await;
+
+        match mining_pool {
+            Ok(_) => {},
+            Err(DatabaseError::FailedToGetConnectionFromPool) => {
+                panic!("Failed to get database pool connection");
+            },
+            Err(_) => {
+                info!("Pool missing from database. Inserting...");
+                let proof_pubkey = utils::proof_pubkey(wallet_pubkey);
+                let result = database
+                    .add_new_pool(wallet_pubkey.to_string(), proof_pubkey.to_string())
+                    .await;
+
+                if result.is_err() {
+                    panic!("Failed to add pool record in database");
+                }
+            },
+        }
+
+        let _exists_pool_record =
+            database.get_pool_by_authority_pubkey(wallet_pubkey.to_string()).await.unwrap();
+        info!("Pool record added to database");
+    }
 
     let epoch_hashes = Arc::new(RwLock::new(EpochHashes {
         best_hash: BestHash { solution: None, difficulty: 0 },
