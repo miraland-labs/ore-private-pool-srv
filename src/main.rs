@@ -752,7 +752,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 let best_solution_difficulty =
                                                     best_solution.to_hash().difficulty();
                                                 if best_solution_difficulty
-                                                    > *app_extra_fee_difficulty
+                                                    >= *app_extra_fee_difficulty
                                                 {
                                                     prio_fee =
                                                         if let Some(ref app_priority_fee_cap) =
@@ -804,7 +804,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     {
                                         let best_solution_difficulty =
                                             best_solution.to_hash().difficulty();
-                                        if best_solution_difficulty > *app_extra_fee_difficulty {
+                                        if best_solution_difficulty >= *app_extra_fee_difficulty {
                                             prio_fee =
                                                 if let Some(ref app_priority_fee_cap) =
                                                     *app_priority_fee_cap
