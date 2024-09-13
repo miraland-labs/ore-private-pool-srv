@@ -861,13 +861,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     {
                                         Ok(fee) => {
                                             let mut prio_fee = fee;
-                                            // MI: calc uplimit of priority fee for precious fee
-                                            // difficulty, e.g. diff > 27
+                                            // MI: calc uplimit of priority fee for precious diff
                                             {
                                                 let best_solution_difficulty =
                                                     best_solution.to_hash().difficulty();
                                                 if best_solution_difficulty
-                                                    > *app_extra_fee_difficulty
+                                                    >= *app_extra_fee_difficulty
                                                 {
                                                     prio_fee =
                                                         if let Some(ref app_priority_fee_cap) =
@@ -883,8 +882,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                                     .saturating_div(100),
                                                             )
                                                         } else {
-                                                            // No priority_fee set as cap, not
-                                                            // exceed 300K
+                                                            // No priority_fee_cap was set
+                                                            // not exceed 300K
                                                             300_000.min(
                                                                 prio_fee
                                                                     .saturating_mul(
@@ -910,7 +909,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 } else {
                                     // static
-                                    app_priority_fee.unwrap_or(0)
+                                    // MI, vanilla: if stick to static/fix price no matter diff, use this stmt.
+                                    // app_priority_fee.unwrap_or(0)
+
+                                    // MI: consider to pay more fee for precious diff even with static fee mode
+                                    let mut prio_fee = app_priority_fee.unwrap_or(0);
+                                    // MI: calc uplimit of priority fee for precious diff
+                                    {
+                                        let best_solution_difficulty =
+                                            best_solution.to_hash().difficulty();
+                                        if best_solution_difficulty >= *app_extra_fee_difficulty {
+                                            prio_fee =
+                                                if let Some(ref app_priority_fee_cap) =
+                                                    *app_priority_fee_cap
+                                                {
+                                                    (*app_priority_fee_cap).min(
+                                                        prio_fee
+                                                            .saturating_mul(100u64.saturating_add(
+                                                                *app_extra_fee_percent,
+                                                            ))
+                                                            .saturating_div(100),
+                                                    )
+                                                } else {
+                                                    // No priority_fee_cap was set
+                                                    // not exceed 300K
+                                                    300_000.min(
+                                                        prio_fee
+                                                            .saturating_mul(100u64.saturating_add(
+                                                                *app_extra_fee_percent,
+                                                            ))
+                                                            .saturating_div(100),
+                                                    )
+                                                }
+                                        }
+                                    }
+                                    prio_fee
                                 };
 
                                 let prio_fee_ix =
