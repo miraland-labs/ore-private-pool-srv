@@ -2774,7 +2774,7 @@ async fn reporting_system(
                             let earned_rewards_dec =
                                 (summary.earning_sub_total as f64).div(decimals);
                             let line = format!(
-                                "{}    {:30}   {:8}   {:8}   {:8}       {:.11}   {}",
+                                "{}    {:30}   {:8}   {:8}   {:8}       {:.11}   {:>7}",
                                 short_mp,
                                 summary.num_of_contributions,
                                 summary.min_diff,
