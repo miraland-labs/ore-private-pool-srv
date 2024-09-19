@@ -859,12 +859,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let old_proof = lock.clone();
             drop(lock);
 
+            debug!("We are lucky! No deadlock of app_proof.");
+
             let cutoff = if (*app_risk_time).gt(&0) {
                 get_cutoff_with_risk(&rpc_client, old_proof, *app_buffer_time, *app_risk_time).await
             } else {
                 get_cutoff(&rpc_client, old_proof, *app_buffer_time).await
             };
-            info!("Start new loop. Let's see current cutoff value: {cutoff}");
+            debug!("Start new loop. Let's check current cutoff value: {cutoff}");
             if cutoff <= 0_i64 {
                 if cutoff <= -(*app_buffer_time as i64) {
                     // prepare to process solution
@@ -1909,8 +1911,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                         drop(lock);
 
                                                         info!("Checking rewards earned.");
-                                                        let latest_proof =
-                                                            { app_proof.lock().await.clone() };
+                                                        // let latest_proof =
+                                                        //     { app_proof.lock().await.clone() };
+                                                        let lock = app_proof.lock().await;
+                                                        let latest_proof = lock.clone();
+                                                        drop(lock);
                                                         let balance = (latest_proof.balance as f64)
                                                             / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
                                                         info!("New balance: {}", balance);
@@ -2118,8 +2123,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 }
 
                                                 info!("Checking rewards earned.");
-                                                let latest_proof =
-                                                    { app_proof.lock().await.clone() };
+                                                // let latest_proof =
+                                                //     { app_proof.lock().await.clone() };
+                                                let lock = app_proof.lock().await;
+                                                let latest_proof = lock.clone();
+                                                drop(lock);
                                                 let balance = (latest_proof.balance as f64)
                                                     / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
                                                 info!("New balance: {}", balance);
@@ -3015,7 +3023,7 @@ async fn proof_tracking_system(ws_url: String, wallet: Arc<Keypair>, proof: Arc<
                             {
                                 let mut app_proof = app_proof.lock().await;
                                 *app_proof = *new_proof;
-                                // drop(app_proof);
+                                drop(app_proof);
                             }
                         }
                     }
