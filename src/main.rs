@@ -344,8 +344,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let powered_by_dbms = POWERED_BY_DBMS.get_or_init(|| {
         let key = "POWERED_BY_DBMS";
         match std::env::var(key) {
-            Ok(val) =>
-                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly."),
+            Ok(val) => {
+                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly.")
+            },
             Err(_) => PoweredByDbms::Unavailable,
         }
     });
@@ -854,8 +855,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut solution_is_none_counter = 0;
         let mut num_waiting = 0;
         loop {
-            let lock = app_proof.lock().await;
-            let old_proof = lock.clone();
+            // MI: vanilla, cause deadlock sometimes.
+            // let lock = app_proof.lock().await;
+            // let old_proof = lock.clone();
+            // drop(lock);
+
+            let old_proof: Proof;
+            let mut lock = app_proof.try_lock();
+            if let Ok(ref mut mutex) = lock {
+                old_proof = mutex.clone();
+            } else {
+                warn!("app_proof.try_lock failed, will try again in a moment.");
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+                continue;
+            }
             drop(lock);
 
             debug!("We are lucky! No deadlock of app_proof.");
@@ -1707,7 +1720,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // cutoff > 0
                 // reset none solution counter
                 solution_is_none_counter = 0;
-                info!("Cutoff countdown(every 5 seconds): {}s", cutoff);
+                info!("Cutoff countdown(about every 5 seconds): {}s", cutoff);
                 // println!("Cutoff countdown: {}s", cutoff);
                 // make sure to sleep between 1..=5 seconds
                 tokio::time::sleep(Duration::from_secs(cutoff.min(5).max(1) as u64)).await;
@@ -2075,8 +2088,9 @@ async fn ws_handler(
         // let mut powered_by_dbms = PoweredByDbms::Unavailable;
         let key = "POWERED_BY_DBMS";
         match std::env::var(key) {
-            Ok(val) =>
-                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly."),
+            Ok(val) => {
+                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly.")
+            },
             Err(_) => PoweredByDbms::Unavailable,
         }
     });
