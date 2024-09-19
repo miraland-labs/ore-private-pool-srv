@@ -2756,6 +2756,9 @@ async fn reporting_system(
                 }
                 time_to_next_reporting = interval_in_hrs * 3600; // in seconds
                 timer = Instant::now();
+            } else {
+                warn!("Reporting system cannot be used when POWERED_BY_DBMS disabled. Exiting reporting system.");
+                return;
             }
         } else {
             tokio::time::sleep(Duration::from_secs(
