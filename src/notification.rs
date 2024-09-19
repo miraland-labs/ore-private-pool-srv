@@ -1,7 +1,6 @@
 // use serenity::builder::ExecuteWebhook;
-use serenity::http::Http;
 use {
-    serenity::model::webhook::Webhook,
+    serenity::{http::Http, model::webhook::Webhook},
     slack_messaging::Message as SlackChannelMessage,
     std::{fmt, io, str::FromStr, time::Duration},
     tokio::sync::mpsc::UnboundedReceiver,

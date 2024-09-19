@@ -344,9 +344,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let powered_by_dbms = POWERED_BY_DBMS.get_or_init(|| {
         let key = "POWERED_BY_DBMS";
         match std::env::var(key) {
-            Ok(val) => {
-                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly.")
-            },
+            Ok(val) =>
+                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly."),
             Err(_) => PoweredByDbms::Unavailable,
         }
     });
@@ -1174,649 +1173,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                         }
                                                     });
                                                 }
-
-                                                // // spawn task #2: landed tx attender
-                                                // let (
-                                                //     mission_completed_sender,
-                                                //     mission_completed_receiver,
-                                                // ) = tokio::sync::oneshot::channel::<u8>();
-                                                // let app_app_mine_success_sender =
-                                                //     mine_success_sender.clone();
-                                                // let app_app_nonce = app_nonce.clone();
-                                                // let app_app_database = database.clone();
-                                                // let app_app_config = mine_config.clone();
-                                                // let app_app_rpc_client = rpc_client.clone();
-                                                // let app_app_slack_message_sender =
-                                                //     slack_message_sender.clone();
-                                                // let app_app_discord_message_sender =
-                                                //     discord_message_sender.clone();
-                                                // let app_app_slack_difficulty =
-                                                //     slack_difficulty.clone();
-                                                // let app_app_messaging_diff =
-                                                // messaging_diff.clone();
-                                                // let app_app_proof = app_proof.clone();
-                                                // let app_app_wallet = app_wallet.clone();
-                                                // let app_app_epoch_hashes =
-                                                // app_epoch_hashes.clone();
-                                                // // let app_app_no_sound_notification =
-                                                // //     app_no_sound_notification.clone();
-                                                // tokio::spawn(async move {
-                                                //     let mine_success_sender =
-                                                //         app_app_mine_success_sender;
-                                                //     // let mission_completed_sender =
-                                                //     //     mission_completed_sender;
-                                                //     let app_nonce = app_app_nonce;
-                                                //     let database = app_app_database;
-                                                //     let mine_config = app_app_config;
-                                                //     let rpc_client = app_app_rpc_client;
-                                                //     let slack_message_sender =
-                                                //         app_app_slack_message_sender.clone();
-                                                //     let discord_message_sender =
-                                                //         app_app_discord_message_sender.clone();
-                                                //     let slack_difficulty =
-                                                //         app_app_slack_difficulty.clone();
-                                                //     let messaging_diff =
-                                                //         app_app_messaging_diff.clone();
-                                                //     let app_proof = app_app_proof;
-                                                //     let app_wallet = app_app_wallet;
-                                                //     let app_epoch_hashes = app_app_epoch_hashes;
-                                                //     // let app_no_sound_notification =
-                                                //     //     app_app_no_sound_notification;
-
-                                                //     // if !*app_no_sound_notification {
-                                                //     //     utils::play_sound();
-                                                //     // }
-
-                                                //     // update proof
-                                                //     // limit number of checking no more than
-                                                // CHECK_LIMIT
-                                                //     let mut num_checking = 0;
-                                                //     loop {
-                                                //         info!("Waiting & Checking for proof
-                                                // challenge update");
-                                                //         // Wait 500ms then check for updated
-                                                // proof
-                                                //         tokio::time::sleep(Duration::from_millis(
-                                                //             500,
-                                                //         ))
-                                                //         .await;
-                                                //         let lock = app_proof.lock().await;
-                                                //         let latest_proof = lock.clone();
-                                                //         drop(lock);
-
-                                                //         if old_proof
-                                                //             .challenge
-                                                //             .eq(&latest_proof.challenge)
-                                                //         {
-                                                //             info!(
-                                                //                 "Proof challenge not updated
-                                                // yet.."
-                                                //             );
-                                                //             num_checking += 1;
-                                                //             if num_checking >= CHECK_LIMIT {
-                                                //                 warn!("No challenge update
-                                                // detected after {CHECK_LIMIT} checkpoints. No more
-                                                // waiting, just keep going...");
-                                                //                 break;
-                                                //             }
-                                                //             // also check from rpc call along
-                                                // with proof notification subscription
-                                                //             if let Ok(p) = get_proof(
-                                                //                 &rpc_client,
-                                                //                 app_wallet.miner_wallet.pubkey(),
-                                                //             )
-                                                //             .await
-                                                //             {
-                                                //                 info!(
-                                                //                     "OLD PROOF CHALLENGE: {}",
-                                                //                     BASE64_STANDARD.encode(
-                                                //                         old_proof.challenge
-                                                //                     )
-                                                //                 );
-                                                //                 info!(
-                                                //                     "RPC PROOF CHALLENGE: {}",
-                                                //                     BASE64_STANDARD
-                                                //                         .encode(p.challenge)
-                                                //                 );
-                                                //                 if old_proof
-                                                //                     .challenge
-                                                //                     .ne(&p.challenge)
-                                                //                 {
-                                                //                     info!("Found new proof from
-                                                // rpc call rather than websocket...");
-                                                //                     let mut lock =
-                                                //                         app_proof.lock().await;
-                                                //                     *lock = p;
-                                                //                     drop(lock);
-
-                                                //                     info!(
-                                                //                         "Checking rewards
-                                                // earned."
-                                                //                     );
-                                                //                     let latest_proof = {
-                                                //                         app_proof
-                                                //                             .lock()
-                                                //                             .await
-                                                //                             .clone()
-                                                //                     };
-                                                //                     let balance = (latest_proof
-                                                //                         .balance
-                                                //                         as f64)
-                                                //                         / 10f64.powf(
-                                                //                             ORE_TOKEN_DECIMALS
-                                                //                                 as f64,
-                                                //                         );
-                                                //                     info!(
-                                                //                         "New balance: {}",
-                                                //                         balance
-                                                //                     );
-
-                                                //                     let multiplier =
-                                                //                         if let Some(config) =
-                                                //                             ore_config
-                                                //                         {
-                                                //                             if config.top_balance
-                                                //                                 > 0
-                                                //                             {
-                                                //                                 1.0 +
-                                                // (latest_proof
-                                                //                                     .balance
-                                                //                                     as f64
-                                                //                                     / config
-                                                //
-                                                // .top_balance
-                                                //                                         as f64)
-                                                //                                     .min(1.0f64)
-                                                //                             } else {
-                                                //                                 1.0f64
-                                                //                             }
-                                                //                         } else {
-                                                //                             1.0f64
-                                                //                         };
-                                                //                     info!(
-                                                //                         "Multiplier: {}",
-                                                //                         multiplier
-                                                //                     );
-
-                                                //                     let rewards = (latest_proof
-                                                //                         .balance
-                                                //                         - old_proof.balance)
-                                                //                         as i64;
-                                                //                     let dec_rewards = (rewards
-                                                //                         as f64)
-                                                //                         / 10f64.powf(
-                                                //                             ORE_TOKEN_DECIMALS
-                                                //                                 as f64,
-                                                //                         );
-                                                //                     info!(
-                                                //                         "Earned: {} ORE",
-                                                //                         dec_rewards
-                                                //                     );
-
-                                                //                     // reset nonce and
-                                                // epoch_hashes
-                                                //                     info!(
-                                                //                     "reset nonce and epoch
-                                                // hashes"
-                                                //                 );
-                                                //                     // reset nonce
-                                                //                     {
-                                                //                         let mut nonce =
-                                                //
-                                                // app_nonce.lock().await;
-                                                //                         *nonce = 0;
-                                                //                     }
-                                                //                     // reset epoch hashes
-                                                //                     {
-                                                //                         let mut mut_epoch_hashes
-                                                // =
-                                                //                             app_epoch_hashes
-                                                //                                 .write()
-                                                //                                 .await;
-                                                //                         mut_epoch_hashes
-                                                //                             .challenge =
-                                                //                             p.challenge;
-                                                //                         mut_epoch_hashes
-                                                //                             .best_hash
-                                                //                             .solution = None;
-                                                //                         mut_epoch_hashes
-                                                //                             .best_hash
-                                                //                             .difficulty = 0;
-                                                //                         mut_epoch_hashes
-                                                //                             .contributions =
-                                                //                             HashMap::new();
-                                                //                     }
-
-                                                //                     // unset mining pause flag to
-                                                // start new mining
-                                                //                     // mission
-                                                //                     info!(
-                                                //                         "resume new mining
-                                                // mission"
-                                                //                     );
-                                                //                     PAUSED.store(false, Relaxed);
-
-                                                //                     // Mission completed, send
-                                                // signal to tx sender
-                                                //                     let _ =
-                                                //                         mission_completed_sender
-                                                //                             .send(0);
-
-                                                //                     // Discussion: spawn a new
-                                                // task for database crud ???
-                                                //                     if powered_by_dbms
-                                                //                         == &PoweredByDbms::Sqlite
-                                                //                     {
-                                                //                         // Add new challenge
-                                                // record to db if powered by dbms,
-                                                //                         info!("Adding new
-                                                // challenge record to db");
-                                                //                         let new_challenge =
-                                                //                         models::InsertChallenge {
-                                                //                             pool_id: mine_config
-                                                //                                 .pool_id,
-                                                //                             challenge:
-                                                // latest_proof
-                                                //                                 .challenge
-                                                //                                 .to_vec(),
-                                                //                             rewards_earned: None,
-                                                //                         };
-
-                                                //                         while let Err(_) =
-                                                // database
-                                                //                             .add_new_challenge(
-                                                //                                 new_challenge
-                                                //                                     .clone(),
-                                                //                             )
-                                                //                             .await
-                                                //                         {
-                                                //                             error!("Failed to add
-                                                // new challenge record to db.");
-                                                //                             info!("Check if the
-                                                // new challenge already exists in db.");
-                                                //                             if let Ok(_) =
-                                                // database
-                                                //
-                                                // .get_challenge_by_challenge(
-                                                //                             new_challenge
-                                                //                                 .challenge
-                                                //                                 .clone(),
-                                                //                         )
-                                                //                         .await
-                                                //                     {
-                                                //                         info!("Challenge already
-                                                // exists, continuing");
-                                                //                         break;
-                                                //                     }
-
-                                                //                             tokio::time::sleep(
-                                                //
-                                                // Duration::from_millis(
-                                                //                                 1000,
-                                                //                             ),
-                                                //                         )
-                                                //                         .await;
-                                                //                         }
-                                                //                         info!("New challenge
-                                                // record successfully added to db");
-                                                //                     }
-
-                                                //                     break;
-                                                //                 }
-                                                //             } else {
-                                                //                 error!(
-                                                //                 "Failed to get proof via rpc
-                                                // call."
-                                                //             );
-                                                //             }
-                                                //         } else {
-                                                //             info!("Proof challenge updated!");
-                                                //             let mut submission_challenge_id =
-                                                //                 i64::MAX;
-                                                //             if powered_by_dbms
-                                                //                 == &PoweredByDbms::Sqlite
-                                                //             {
-                                                //                 // Fetch old proof challenge(id
-                                                // used later) records from db
-                                                //                 info!("Check if old/last challenge for the pool exists in the database");
-                                                //                 let old_challenge;
-                                                //                 loop {
-                                                //                     if let Ok(c) = database
-                                                //
-                                                // .get_challenge_by_challenge(
-                                                //                             old_proof
-                                                //                                 .challenge
-                                                //                                 .to_vec(),
-                                                //                         )
-                                                //                         .await
-                                                //                     {
-                                                //                         old_challenge = c;
-                                                //                         submission_challenge_id =
-                                                //                             old_challenge.id;
-                                                //                         break;
-                                                //                     } else {
-                                                //                         warn!(
-                                                //                         "Failed to get old/last
-                                                // challenge record from db! Inserting if
-                                                // necessary..."
-                                                //                     );
-                                                //                         let new_challenge =
-                                                //                         models::InsertChallenge {
-                                                //                             pool_id: mine_config
-                                                //                                 .pool_id,
-                                                //                             challenge: old_proof
-                                                //                                 .challenge
-                                                //                                 .to_vec(),
-                                                //                             rewards_earned: None,
-                                                //                         };
-
-                                                //                         while let Err(_) =
-                                                // database
-                                                //                             .add_new_challenge(
-                                                //                                 new_challenge
-                                                //                                     .clone(),
-                                                //                             )
-                                                //                             .await
-                                                //                         {
-                                                //                             error!("Failed to add
-                                                // old/last challenge record to db.");
-                                                //                             info!("Check if the
-                                                // challenge already exists in db.");
-                                                //                             if let Ok(_) =
-                                                // database
-                                                //
-                                                // .get_challenge_by_challenge(
-                                                //                             new_challenge
-                                                //                                 .challenge
-                                                //                                 .clone(),
-                                                //                         )
-                                                //                         .await
-                                                //                     {
-                                                //                         info!("The challenge
-                                                // already exists, continuing");
-                                                //                         break;
-                                                //                     }
-
-                                                //                             tokio::time::sleep(
-                                                //
-                                                // Duration::from_millis(
-                                                //                                 1_000,
-                                                //                             ),
-                                                //                         )
-                                                //                         .await;
-                                                //                         }
-                                                //                         info!("Old/last challenge
-                                                // record successfully added to db");
-                                                //                         //
-                                                // tokio::time::sleep(Duration::from_millis(1_000)).
-                                                // await;
-                                                //                     }
-                                                //                 }
-
-                                                //                 // Add new challenge record to db
-                                                //                 info!(
-                                                //                 "Adding new challenge record to
-                                                // db"
-                                                //             );
-                                                //                 let new_challenge =
-                                                //                     models::InsertChallenge {
-                                                //                         pool_id: mine_config
-                                                //                             .pool_id,
-                                                //                         challenge: latest_proof
-                                                //                             .challenge
-                                                //                             .to_vec(),
-                                                //                         rewards_earned: None,
-                                                //                     };
-
-                                                //                 while let Err(_) = database
-                                                //                     .add_new_challenge(
-                                                //                         new_challenge.clone(),
-                                                //                     )
-                                                //                     .await
-                                                //                 {
-                                                //                     error!(
-                                                //                     "Failed to add new challenge
-                                                // record to db."
-                                                //                 );
-                                                //                     info!("Check if new challenge
-                                                // already exists in db.");
-                                                //                     if let Ok(_) = database
-                                                //
-                                                // .get_challenge_by_challenge(
-                                                //                             new_challenge
-                                                //                                 .challenge
-                                                //                                 .clone(),
-                                                //                         )
-                                                //                         .await
-                                                //                     {
-                                                //                         info!(
-                                                //                         "Challenge already exists
-                                                // in db, continuing"
-                                                //                     );
-                                                //                         break;
-                                                //                     }
-
-                                                //                     tokio::time::sleep(
-                                                //                         Duration::from_millis(
-                                                //                             1_000,
-                                                //                         ),
-                                                //                     )
-                                                //                     .await;
-                                                //                 }
-                                                //                 info!("New challenge record
-                                                // successfully added to db");
-                                                //             }
-
-                                                //             info!("Checking rewards earned.");
-                                                //             let latest_proof =
-                                                //                 { app_proof.lock().await.clone()
-                                                // };
-                                                //             let balance = (latest_proof.balance
-                                                //                 as f64)
-                                                //                 / 10f64.powf(
-                                                //                     ORE_TOKEN_DECIMALS as f64,
-                                                //                 );
-                                                //             info!("New balance: {}", balance);
-
-                                                //             let multiplier = if let Some(config)
-                                                // =
-                                                //                 ore_config
-                                                //             {
-                                                //                 if config.top_balance > 0 {
-                                                //                     1.0 + (latest_proof.balance
-                                                //                         as f64
-                                                //                         / config.top_balance as
-                                                // f64)
-                                                //                         .min(1.0f64)
-                                                //                 } else {
-                                                //                     1.0f64
-                                                //                 }
-                                                //             } else {
-                                                //                 1.0f64
-                                                //             };
-                                                //             info!("Multiplier: {}", multiplier);
-
-                                                //             let rewards = (latest_proof.balance
-                                                //                 - old_proof.balance)
-                                                //                 as i64;
-                                                //             let dec_rewards = (rewards as f64)
-                                                //                 / 10f64.powf(
-                                                //                     ORE_TOKEN_DECIMALS as f64,
-                                                //                 );
-                                                //             info!("Earned: {} ORE", dec_rewards);
-
-                                                //             let contributions = {
-                                                //                 app_epoch_hashes
-                                                //                     .read()
-                                                //                     .await
-                                                //                     .contributions
-                                                //                     .clone()
-                                                //             };
-
-                                                //             let mut total_hashpower: u64 = 0;
-
-                                                //             for contribution in
-                                                // contributions.iter()
-                                                //             {
-                                                //                 total_hashpower +=
-                                                //                     contribution.1.hashpower;
-                                                //             }
-
-                                                //             let _ = mine_success_sender.send(
-                                                //                 MessageInternalMineSuccess {
-                                                //                     difficulty,
-                                                //                     total_balance: balance,
-                                                //                     rewards,
-                                                //                     challenge_id:
-                                                //                         submission_challenge_id,
-                                                //                     challenge:
-                                                // old_proof.challenge,
-                                                //                     best_nonce:
-                                                // u64::from_le_bytes(
-                                                //                         best_solution.n,
-                                                //                     ),
-                                                //                     total_hashpower,
-                                                //                     ore_config,
-                                                //                     multiplier,
-                                                //                     contributions,
-                                                //                 },
-                                                //             );
-
-                                                //             {
-                                                //                 let mut mut_proof =
-                                                //                     app_proof.lock().await;
-                                                //                 *mut_proof = latest_proof;
-                                                //             }
-                                                //             // reset nonce and epoch_hashes
-                                                //             info!("reset nonce and epoch
-                                                // hashes");
-
-                                                //             // reset nonce
-                                                //             {
-                                                //                 let mut nonce =
-                                                //                     app_nonce.lock().await;
-                                                //                 *nonce = 0;
-                                                //             }
-                                                //             // reset epoch hashes
-                                                //             {
-                                                //                 let mut mut_epoch_hashes =
-                                                //
-                                                // app_epoch_hashes.write().await;
-                                                //                 mut_epoch_hashes.challenge =
-                                                //                     latest_proof.challenge;
-                                                //                 mut_epoch_hashes
-                                                //                     .best_hash
-                                                //                     .solution = None;
-                                                //                 mut_epoch_hashes
-                                                //                     .best_hash
-                                                //                     .difficulty = 0;
-                                                //                 mut_epoch_hashes.contributions =
-                                                //                     HashMap::new();
-                                                //             }
-                                                //             // unset mining pause flag to start
-                                                // new mining
-                                                //             // mission
-                                                //             info!("resume new mining mission");
-                                                //             PAUSED.store(false, Relaxed);
-
-                                                //             // Mission completed, send signal to
-                                                // tx sender
-                                                //             let _ =
-                                                //                 mission_completed_sender.send(0);
-
-                                                //             // last one, notify slack and other
-                                                // messaging channels if necessary
-                                                //             if difficulty.ge(&*slack_difficulty)
-                                                //                 || difficulty.ge(&*messaging_diff)
-                                                //             {
-                                                //                 if messaging_flags
-                                                //
-                                                // .contains(MessagingFlags::SLACK)
-                                                //                 {
-                                                //                     let _ = slack_message_sender
-                                                //                         .send(
-                                                //
-                                                // RewardsMessage::Rewards(
-                                                //                                 difficulty,
-                                                //                                 dec_rewards,
-                                                //                                 balance,
-                                                //                             ),
-                                                //                         );
-                                                //                 }
-
-                                                //                 if messaging_flags.contains(
-                                                //                     MessagingFlags::DISCORD,
-                                                //                 ) {
-                                                //                     let _ =
-                                                // discord_message_sender
-                                                //                         .send(
-                                                //
-                                                // RewardsMessage::Rewards(
-                                                //                                 difficulty,
-                                                //                                 dec_rewards,
-                                                //                                 balance,
-                                                //                             ),
-                                                //                         );
-                                                //                 }
-                                                //             }
-
-                                                //             break;
-                                                //         }
-                                                //     }
-                                                // });
-
-                                                // // MI: play sound here, meanwhile giving time to
-                                                // above 2 spawned tasks started
-                                                // if !*app_no_sound_notification {
-                                                //     utils::play_sound();
-                                                // }
-
-                                                // if let Ok(_) = mission_completed_receiver.await {
-                                                //     // all tx related activities have succeeded,
-                                                // exit tx submit loop
-                                                //     break;
-                                                // } else {
-                                                //     error!("Oops! No mission completion message
-                                                // yet. Waiting...");
-                                                // }
                                             },
 
                                             Err(err) => {
                                                 match err.kind {
-                                            ClientErrorKind::TransactionError(solana_sdk::transaction::TransactionError::InstructionError(_, err)) => {
-                                                match err {
-                                                    // Custom instruction error, parse into OreError
-                                                    solana_program::instruction::InstructionError::Custom(err_code) => {
-                                                        match err_code {
-                                                            e if e == OreError::NeedsReset as u32 => {
-                                                                error!("Ore: The epoch has ended and needs reset. Retrying...");
-                                                                continue;
-                                                            }
-                                                            e if e == OreError::HashInvalid as u32 => {
-                                                                error!("❌ Ore: The provided hash is invalid. See you next solution.");
+                                                    ClientErrorKind::TransactionError(solana_sdk::transaction::TransactionError::InstructionError(_, err)) => {
+                                                        match err {
+                                                            // Custom instruction error, parse into OreError
+                                                            solana_program::instruction::InstructionError::Custom(err_code) => {
+                                                                match err_code {
+                                                                    e if e == OreError::NeedsReset as u32 => {
+                                                                        error!("Ore: The epoch has ended and needs reset. Retrying...");
+                                                                        continue;
+                                                                    }
+                                                                    e if e == OreError::HashInvalid as u32 => {
+                                                                        error!("❌ Ore: The provided hash is invalid. See you next solution.");
 
-                                                                // break for (0..SUBMIT_LIMIT), re-enter outer loop to restart
-                                                                break;
-                                                            }
+                                                                        // break for (0..SUBMIT_LIMIT), re-enter outer loop to restart
+                                                                        break;
+                                                                    }
+                                                                    _ => {
+                                                                        error!("{}", &err.to_string());
+                                                                        continue;
+                                                                    }
+                                                                }
+                                                            },
+
+                                                            // Non custom instruction error, return
                                                             _ => {
                                                                 error!("{}", &err.to_string());
-                                                                continue;
                                                             }
                                                         }
-                                                    },
+                                                    }
 
-                                                    // Non custom instruction error, return
+                                                    // MI: other error like what?
                                                     _ => {
                                                         error!("{}", &err.to_string());
                                                     }
                                                 }
-                                            }
-
-                                            // MI: other error like what?
-                                            _ => {
-                                                error!("{}", &err.to_string());
-                                            }
-                                        }
                                                 // TODO: is sleep here necessary?, MI
                                                 tokio::time::sleep(Duration::from_millis(100)).await
                                             },
@@ -2313,7 +1707,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // cutoff > 0
                 // reset none solution counter
                 solution_is_none_counter = 0;
-                info!("Cutoff countdown: {}s", cutoff);
+                info!("Cutoff countdown(every 5 seconds): {}s", cutoff);
                 // println!("Cutoff countdown: {}s", cutoff);
                 // make sure to sleep between 1..=5 seconds
                 tokio::time::sleep(Duration::from_secs(cutoff.min(5).max(1) as u64)).await;
@@ -2681,9 +2075,8 @@ async fn ws_handler(
         // let mut powered_by_dbms = PoweredByDbms::Unavailable;
         let key = "POWERED_BY_DBMS";
         match std::env::var(key) {
-            Ok(val) => {
-                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly.")
-            },
+            Ok(val) =>
+                PoweredByDbms::from_str(&val).expect("POWERED_BY_DBMS must be set correctly."),
             Err(_) => PoweredByDbms::Unavailable,
         }
     });
