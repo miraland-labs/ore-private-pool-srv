@@ -2,4 +2,4 @@
 /target
 /logs
 .env
-# ore_priv_pool.db.sqlite3
+ore_priv_pool.db.sqlite3

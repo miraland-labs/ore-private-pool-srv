@@ -1108,6 +1108,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         resign_txs_count: Some(5),
                                         with_spinner: true,
                                     };
+                                    info!(
+                                        "Sending tpu and confirm... with {} priority fee {}",
+                                        fee_type, fee
+                                    );
                                     match tpu::send_and_confirm(&rpc_client, &ixs, &*signer, config)
                                         .await
                                     {
@@ -1146,7 +1150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                         tx.sign(&[&signer], hash);
                                         info!(
-                                            "Sending signed tx... with {} priority fee {}",
+                                            "Sending rpc signed tx... with {} priority fee {}",
                                             fee_type, fee
                                         );
                                         info!("attempt: {}", i + 1);
@@ -2140,19 +2144,53 @@ async fn ws_handler(
                 // },
                 Err(DatabaseError::QueryFailed) | Err(DatabaseError::InteractionFailed) => {
                     info!("Miner pubkey record missing from database. Inserting...");
-                    let result = database
+                    let add_miner_result = database
                         .add_new_miner(user_pubkey.to_string(), true, "Enrolled".to_string())
                         .await;
                     miner =
                         database.get_miner_by_pubkey_str(user_pubkey.to_string()).await.unwrap();
 
                     let wallet_pubkey = user_pubkey;
-                    let pool = database
-                        .get_pool_by_authority_pubkey(wallet_pubkey.to_string())
-                        .await
-                        .unwrap();
 
-                    if result.is_ok() {
+                    let db_pool =
+                        database.get_pool_by_authority_pubkey(wallet_pubkey.to_string()).await;
+
+                    let pool;
+                    let mut add_pool_result = Ok::<(), DatabaseError>(());
+                    match db_pool {
+                        Ok(db_pool) => {
+                            pool = db_pool;
+                        },
+                        Err(DatabaseError::QueryFailed) | Err(DatabaseError::InteractionFailed) => {
+                            info!("Pool record missing from database. Inserting...");
+                            add_pool_result = database
+                                .add_new_pool(
+                                    wallet_pubkey.to_string(),
+                                    utils::proof_pubkey(wallet_pubkey).to_string(),
+                                )
+                                .await;
+                            pool = database
+                                .get_pool_by_authority_pubkey(wallet_pubkey.to_string())
+                                .await
+                                .unwrap();
+                        },
+                        Err(DatabaseError::FailedToGetConnectionFromPool) => {
+                            error!("Failed to get database pool connection.");
+                            return Err((
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Internal Server Error",
+                            ));
+                        },
+                        Err(_) => {
+                            error!("DB Error: Catch all.");
+                            return Err((
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Internal Server Error",
+                            ));
+                        },
+                    }
+
+                    if add_miner_result.is_ok() && add_pool_result.is_ok() {
                         let new_reward = InsertReward { miner_id: miner.id, pool_id: pool.id };
                         let result = database.add_new_reward(new_reward).await;
 
