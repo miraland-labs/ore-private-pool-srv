@@ -105,6 +105,7 @@ const CHECK_LIMIT: usize = 30; // 30
 const NO_BEST_SOLUTION_INTERVAL: usize = 5;
 
 static POWERED_BY_DBMS: OnceLock<PoweredByDbms> = OnceLock::new();
+static WALLET_PUBKEY: OnceLock<Pubkey> = OnceLock::new();
 
 #[derive(Clone)]
 struct ClientConnection {
@@ -502,6 +503,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fee_wallet = read_keypair_file(wallet_path)
         .expect("Failed to load keypair from file: {wallet_path_str}");
     info!("loaded fee wallet {}", wallet.pubkey().to_string());
+
+    WALLET_PUBKEY.get_or_init(|| wallet_pubkey);
 
     info!("establishing rpc connection...");
     let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
@@ -2119,6 +2122,8 @@ async fn ws_handler(
         }
     });
 
+    let pool_operator_wallet_pubkey = WALLET_PUBKEY.get().unwrap();
+
     // verify client
     if let Ok(user_pubkey) = Pubkey::from_str(pubkey) {
         if powered_by_dbms == &PoweredByDbms::Sqlite {
@@ -2150,7 +2155,9 @@ async fn ws_handler(
                     miner =
                         database.get_miner_by_pubkey_str(user_pubkey.to_string()).await.unwrap();
 
-                    let wallet_pubkey = user_pubkey;
+                    // MI: vanilla, user_pubkey needs to signup with miner delegation pool
+                    // let wallet_pubkey = user_pubkey;
+                    let wallet_pubkey = *pool_operator_wallet_pubkey; // MI, all clients share operator/miner private pool
 
                     let db_pool =
                         database.get_pool_by_authority_pubkey(wallet_pubkey.to_string()).await;
