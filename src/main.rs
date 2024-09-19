@@ -864,6 +864,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 get_cutoff(&rpc_client, old_proof, *app_buffer_time).await
             };
+            info!("Start new loop. Let's see current cutoff value: {cutoff}");
             if cutoff <= 0_i64 {
                 if cutoff <= -(*app_buffer_time as i64) {
                     // prepare to process solution
