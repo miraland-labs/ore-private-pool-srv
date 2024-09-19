@@ -878,7 +878,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 get_cutoff(&rpc_client, old_proof, *app_buffer_time).await
             };
-            debug!("Start new loop. Let's check current cutoff value: {cutoff}");
+            debug!("Enter new loop iteration. Let's check current cutoff value: {cutoff}");
             if cutoff <= 0_i64 {
                 if cutoff <= -(*app_buffer_time as i64) {
                     // prepare to process solution
@@ -945,9 +945,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                     if !best_solution.is_valid(&loaded_proof.challenge) {
                                         error!("❌ SOLUTION IS NOT VALID ANYMORE!");
-                                        let mut lock = app_proof.lock().await;
-                                        *lock = loaded_proof;
-                                        drop(lock);
+                                        // let mut lock = app_proof.lock().await;
+                                        // *lock = loaded_proof;
+                                        // drop(lock);
                                         break;
                                     }
 
@@ -1715,15 +1715,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         solution_is_none_counter += 1;
                         tokio::time::sleep(Duration::from_millis(1_000)).await;
                     }
+                } else {
+                    // buffer time window
+                    info!(
+                        "Enter buffer time window that spans {} seconds. Standby!",
+                        *app_buffer_time
+                    );
+                    tokio::time::sleep(Duration::from_millis(1_000)).await;
                 }
             } else {
                 // cutoff > 0
                 // reset none solution counter
                 solution_is_none_counter = 0;
-                info!("Cutoff countdown(about every 5 seconds): {}s", cutoff);
+
+                // info!("Cutoff countdown(about every 5 seconds): {}s", cutoff);
                 // println!("Cutoff countdown: {}s", cutoff);
                 // make sure to sleep between 1..=5 seconds
-                tokio::time::sleep(Duration::from_secs(cutoff.min(5).max(1) as u64)).await;
+                // tokio::time::sleep(Duration::from_secs(cutoff.min(5).max(1) as u64)).await;
+
+                info!("Time to cutoff: {}s. Sleep...", cutoff);
+
+                tokio::time::sleep(Duration::from_secs(cutoff as u64)).await;
             };
         }
     });
