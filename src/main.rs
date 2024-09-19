@@ -1101,7 +1101,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             info!("✅ Success!!");
                                         },
                                         Err(e) => {
-                                            error!(e)
+                                            error!(
+                                                "Error occurred within tpu::send_and_confirm: {}",
+                                                e
+                                            )
                                         },
                                     }
                                 } else {
