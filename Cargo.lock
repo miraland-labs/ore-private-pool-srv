@@ -3332,7 +3332,7 @@ dependencies = [
  "solana-account-decoder",
  "solana-client",
  "solana-program",
- "solana-rpc-client-api",
+ "solana-rpc-client",
  "solana-sdk",
  "solana-transaction-status",
  "spl-associated-token-account",

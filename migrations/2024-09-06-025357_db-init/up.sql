@@ -30,6 +30,7 @@ DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.miners CASCADE;
 DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.pools CASCADE;
 DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.challenges CASCADE;
 DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.submissions CASCADE;
+DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.contributions CASCADE;
 DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.transactyions CASCADE;
 DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.claims CASCADE;
 DROP TRIGGER IF EXISTS update_timestamp_trigger ON ore.rewards CASCADE;
@@ -41,6 +42,7 @@ DROP TABLE IF EXISTS ore.miners;
 DROP TABLE IF EXISTS ore.pools;
 DROP TABLE IF EXISTS ore.challenges;
 DROP TABLE IF EXISTS ore.submissions;
+DROP TABLE IF EXISTS ore.contributions;
 DROP TABLE IF EXISTS ore.transactions;
 DROP TABLE IF EXISTS ore.claims;
 DROP TABLE IF EXISTS ore.rewards;
@@ -151,7 +153,7 @@ CREATE INDEX indx_pools_authority_pubkey ON ore.pools (authority_pubkey ASC);
 CREATE TABLE ore.challenges (
     id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     pool_id INT NOT NULL,
-    submission_id INT,
+    contribution_id INT,
     challenge BYTEA NOT NULL,
     rewards_earned BIGINT DEFAULT 0,
     created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -168,11 +170,11 @@ CREATE INDEX indx_challenges_challenge ON ore.challenges (challenge ASC);
 
 CREATE TABLE ore.submissions (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  miner_id INT NOT NULL,
-  challenge_id INT NOT NULL,
+  miner_id BIGINT NOT NULL,
+  challenge_id BIGINT NOT NULL,
   difficulty SMALLINT NOT NULL,
   nonce BIGINT NOT NULL,
-  digest BYTEA NOT NULL,
+  digest BYTEA,
   created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
   updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -186,12 +188,34 @@ CREATE INDEX indx_submissions_miner_challenge_ids ON ore.submissions (miner_id A
 CREATE INDEX indx_submissions_nonce ON ore.submissions (nonce ASC);
 
 
+CREATE TABLE ore.contributions (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  miner_id BIGINT NOT NULL,
+  challenge_id BIGINT NOT NULL,
+  difficulty SMALLINT NOT NULL,
+  nonce BIGINT NOT NULL,
+  digest BYTEA,
+  created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE OR REPLACE TRIGGER update_timestamp_trigger
+BEFORE UPDATE ON ore.contributions
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+CREATE INDEX indx_contributions_miner_challenge_ids ON ore.contributions (miner_id ASC, challenge_id ASC);
+CREATE INDEX indx_contributions_nonce ON ore.contributions (nonce ASC);
+CREATE INDEX indx_contributions_created ON contributions (created DESC);
+CREATE INDEX indx_contributions_challenge_id ON contributions (challenge_id ASC);
+
+
 CREATE TABLE ore.transactions (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   transaction_type VARCHAR(30) NOT NULL,
   signature VARCHAR(200) NOT NULL,
   priority_fee INT DEFAULT 0 NOT NULL,
-  pool_id INT NOT NULL,
+  pool_id INT,
   miner_id INT,
   created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
   updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -209,9 +233,9 @@ CREATE INDEX indx_transactions_miner_id_created ON ore.transactions (miner_id AS
 
 CREATE TABLE ore.claims (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  miner_id INT NOT NULL,
+  miner_id BIGINT NOT NULL,
   pool_id INT NOT NULL,
-  transaction_id INT NOT NULL,
+  transaction_id BIGINT NOT NULL,
   amount BIGINT NOT NULL,
   created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
   updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -227,7 +251,7 @@ CREATE INDEX indx_claims_miner_pool_txn_ids ON ore.claims (miner_id ASC, pool_id
 
 CREATE TABLE ore.rewards (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  miner_id INT NOT NULL,
+  miner_id BIGINT NOT NULL,
   pool_id INT NOT NULL,
   balance BIGINT DEFAULT 0 NOT NULL,
   created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -244,9 +268,9 @@ CREATE INDEX indx_rewards_miner_pool_ids ON ore.rewards (miner_id ASC, pool_id A
 
 CREATE TABLE ore.earnings (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  miner_id INT NOT NULL,
+  miner_id BIGINT NOT NULL,
   pool_id INT NOT NULL,
-  challenge_id INT NOT NULL,
+  challenge_id BIGINT NOT NULL,
   amount BIGINT DEFAULT 0 NOT NULL,
   created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
   updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL

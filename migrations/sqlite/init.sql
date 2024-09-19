@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS members;
 DROP TABLE IF EXISTS pools;
 DROP TABLE IF EXISTS challenges;
 DROP TABLE IF EXISTS submissions;
+DROP TABLE IF EXISTS contributions;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS claims;
 DROP TABLE IF EXISTS rewards;
@@ -64,6 +65,7 @@ CREATE TABLE members (
     id INTEGER PRIMARY KEY,
     pubkey VARCHAR(44) NOT NULL,
     enabled BOOLEAN DEFAULT false NOT NULL,
+    role_contributor BOOLEAN DEFAULT false NOT NULL,
     role_miner BOOLEAN DEFAULT false NOT NULL,
     role_operator BOOLEAN DEFAULT false NOT NULL,
     status VARCHAR(30) DEFAULT 'Enrolled' NOT NULL,
@@ -109,7 +111,7 @@ CREATE INDEX indx_pools_authority_pubkey ON pools (authority_pubkey ASC);
 CREATE TABLE challenges (
     id INTEGER PRIMARY KEY,
     pool_id INT NOT NULL,
-    submission_id INT,
+    contribution_id INT,
     challenge BYTEA NOT NULL,
     rewards_earned BIGINT DEFAULT 0,
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -125,7 +127,7 @@ BEGIN
     WHERE id = OLD.id;
 END;
 
-CREATE INDEX indx_challenges_challenge ON challenges (challenge ASC);
+CREATE INDEX uniq_challenges_challenge ON challenges (challenge ASC);
 
 
 CREATE TABLE submissions (
@@ -134,7 +136,7 @@ CREATE TABLE submissions (
     challenge_id INT NOT NULL,
     difficulty SMALLINT NOT NULL,
     nonce BIGINT NOT NULL,
-    digest BYTEA NOT NULL,
+    digest BYTEA,
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -152,12 +154,38 @@ CREATE INDEX indx_submissions_miner_challenge_ids ON submissions (miner_id ASC, 
 CREATE INDEX indx_submissions_nonce ON submissions (nonce ASC);
 
 
+CREATE TABLE contributions (
+    id INTEGER PRIMARY KEY,
+    miner_id INT NOT NULL,
+    challenge_id INT NOT NULL,
+    difficulty SMALLINT NOT NULL,
+    nonce BIGINT NOT NULL,
+    digest BYTEA,
+    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS contributions_update_timestamp_trigger
+AFTER UPDATE ON contributions
+WHEN old.updated <> current_timestamp
+BEGIN
+     UPDATE contributions
+    SET updated = CURRENT_TIMESTAMP
+    WHERE id = OLD.id;
+END;
+
+CREATE INDEX indx_contributions_miner_challenge_ids ON contributions (miner_id ASC, challenge_id ASC);
+CREATE INDEX indx_contributions_nonce ON contributions (nonce ASC);
+CREATE INDEX indx_contributions_created ON contributions (created DESC);
+CREATE INDEX indx_contributions_challenge_id ON contributions (challenge_id ASC);
+
+
 CREATE TABLE transactions (
     id INTEGER PRIMARY KEY,
     transaction_type VARCHAR(30) NOT NULL,
     signature VARCHAR(200) NOT NULL,
     priority_fee INT DEFAULT 0 NOT NULL,
-    pool_id INT NOT NULL,
+    pool_id INT,
     miner_id INT,
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
