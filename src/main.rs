@@ -2287,6 +2287,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         tokio::time::sleep(Duration::from_millis(500)).await;
                     } else {
+                        // solution is None
                         // solution_is_none_counter += 1;
                         if solution_is_none_counter % NO_BEST_SOLUTION_INTERVAL == 0 {
                             info!("No best solution yet.");
@@ -2296,11 +2297,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             } else {
+                // cutoff > 0
                 // reset none solution counter
                 solution_is_none_counter = 0;
                 info!("Cutoff countdown: {}s", cutoff);
                 // println!("Cutoff countdown: {}s", cutoff);
-                tokio::time::sleep(Duration::from_secs(cutoff.min(5) as u64)).await;
+                // make sure to sleep between 1..=5 seconds
+                tokio::time::sleep(Duration::from_secs(cutoff.min(5).max(1) as u64)).await;
             };
         }
     });
