@@ -1619,7 +1619,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 PAUSED.store(false, Relaxed);
 
                                                 // Mission completed, send signal to tx sender
-                                                let _ = mission_completed_sender.send(0);
+                                                // let _ = mission_completed_sender.send(0);
+                                                if let Err(_) = mission_completed_sender.send(0) {
+                                                    error!(
+                                                        "The mission completed receiver dropped."
+                                                    );
+                                                }
 
                                                 // last one, notify slack and other messaging
                                                 // channels if necessary
@@ -1668,8 +1673,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         break;
                                     } else {
                                         error!(
-                                            "Oops! No mission completion message yet. Waiting..."
+                                            // "Oops! No mission completion message yet. Waiting..."
+                                            "The mission completed sender dropped."
                                         );
+                                        warn!("The laned tx attender task may fail since no mission completion message received.");
+                                        break;
                                     }
                                 }
                             } else {
@@ -2601,7 +2609,7 @@ async fn client_message_handler_system(
                                                 },
                                             );
                                             if diff > epoch_hashes.best_hash.difficulty {
-                                                info!("New best diff: {}", diff);
+                                                // info!("New best diff: {}", diff);
                                                 epoch_hashes.best_hash.difficulty = diff;
                                                 epoch_hashes.best_hash.solution = Some(solution);
                                             }
