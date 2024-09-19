@@ -1725,7 +1725,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 } else {
                     // buffer time window
-                    info!(
+                    debug!(
                         "Enter buffer time window that spans {} seconds. Standby!",
                         *app_buffer_time
                     );
@@ -2609,7 +2609,7 @@ async fn client_message_handler_system(
                                                 },
                                             );
                                             if diff > epoch_hashes.best_hash.difficulty {
-                                                // info!("New best diff: {}", diff);
+                                                debug!("New best diff: {}", diff);
                                                 epoch_hashes.best_hash.difficulty = diff;
                                                 epoch_hashes.best_hash.solution = Some(solution);
                                             }
@@ -2629,7 +2629,7 @@ async fn client_message_handler_system(
                                             },
                                         );
                                         if diff > epoch_hashes.best_hash.difficulty {
-                                            info!("New best diff: {}", diff);
+                                            debug!("New best diff: {}", diff);
                                             epoch_hashes.best_hash.difficulty = diff;
                                             epoch_hashes.best_hash.solution = Some(solution);
                                         }
