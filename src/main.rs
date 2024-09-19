@@ -864,7 +864,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 get_cutoff(&rpc_client, old_proof, *app_buffer_time).await
             };
-            if cutoff <= 0 {
+            if cutoff <= 0_i64 {
                 if cutoff <= -(*app_buffer_time as i64) {
                     // prepare to process solution
                     let reader = app_epoch_hashes.read().await;
