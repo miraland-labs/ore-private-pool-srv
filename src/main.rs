@@ -2186,6 +2186,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 {
                                                     let mut mut_proof = app_proof.lock().await;
                                                     *mut_proof = latest_proof;
+                                                    drop(mut_proof);
                                                 }
                                                 // reset nonce and epoch_hashes
                                                 info!("reset nonce and epoch hashes");
