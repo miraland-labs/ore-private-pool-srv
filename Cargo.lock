@@ -1502,7 +1502,8 @@ checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
 [[package]]
 name = "deadpool"
 version = "0.12.1"
-source = "git+https://github.com/bikeshedder/deadpool.git?rev=e6de358#e6de358f6a602ee2d0d45583f11f7b7756a51abb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6541a3916932fe57768d4be0b1ffb5ec7cbf74ca8c903fdfd5c0fe8aa958f0ed"
 dependencies = [
  "deadpool-runtime",
  "num_cpus",
@@ -1512,25 +1513,17 @@ dependencies = [
 [[package]]
 name = "deadpool-runtime"
 version = "0.1.4"
-source = "git+https://github.com/bikeshedder/deadpool.git?rev=e6de358#e6de358f6a602ee2d0d45583f11f7b7756a51abb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
-name = "deadpool-sqlite"
-version = "0.8.1"
-source = "git+https://github.com/bikeshedder/deadpool.git?rev=e6de358#e6de358f6a602ee2d0d45583f11f7b7756a51abb"
-dependencies = [
- "deadpool",
- "deadpool-sync",
- "rusqlite",
-]
-
-[[package]]
 name = "deadpool-sync"
 version = "0.1.4"
-source = "git+https://github.com/bikeshedder/deadpool.git?rev=e6de358#e6de358f6a602ee2d0d45583f11f7b7756a51abb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "524bc3df0d57e98ecd022e21ba31166c2625e7d3e5bcc4510efaeeab4abcab04"
 dependencies = [
  "deadpool-runtime",
 ]
@@ -2902,6 +2895,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "miraland-deadpool-sqlite"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52cd2d3bfbe2c0e3f8f86527caaec2a8deb2c9b226bea682c9663f0d72528903"
+dependencies = [
+ "deadpool",
+ "deadpool-sync",
+ "rusqlite",
+]
+
+[[package]]
 name = "mpl-token-metadata"
 version = "4.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3302,7 +3306,7 @@ dependencies = [
 
 [[package]]
 name = "ore-private-pool-srv"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "axum",
  "axum-extra",
@@ -3314,11 +3318,11 @@ dependencies = [
  "clap 4.5.17",
  "color-eyre",
  "crossbeam-channel",
- "deadpool-sqlite",
  "dotenv",
  "drillx",
  "futures",
  "futures-util",
+ "miraland-deadpool-sqlite",
  "ore-api",
  "ore-utils",
  "rand 0.8.5",
