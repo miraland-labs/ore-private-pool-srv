@@ -2769,7 +2769,7 @@ async fn reporting_system(
                         info!("[{report_time}] {report_title}");
                         println!("[{report_time}] {report_title}");
                         let line_header = format!(
-                            "miner_pubkey     num_of_qualified_contributions   min_diff   avg_diff   max_diff   earning_sub_total   percent"
+                            "miner_pubkey     num_contributions   min_diff   avg_diff   max_diff   earning_sub_total   percent"
                         );
                         info!("{line_header}");
                         println!("{line_header}");
@@ -2782,7 +2782,7 @@ async fn reporting_system(
                             let earned_rewards_dec =
                                 (summary.earning_sub_total as f64).div(decimals);
                             let line = format!(
-                                "{}    {:30}   {:8}   {:8}   {:8}       {:.11}   {:>7}",
+                                "{}    {:17}   {:8}   {:8}   {:8}       {:.11}   {:>7}",
                                 short_mp,
                                 summary.num_of_contributions,
                                 summary.min_diff,
