@@ -85,6 +85,20 @@ export CPPFLAGS="-I/usr/local/opt/openssl/include"
 choco install openssl pkgconfiglite
 ```
 
+#### rust (if not installed yet)
+
+Open a terminal window on Mac / Linux / BSD / Windows PowerShell:
+
+```
+curl https://sh.rustup.rs -sSf | sh
+```
+
+or
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
 ## Build
 
 To build the codebase from scratch, checkout the repo and use cargo to build:

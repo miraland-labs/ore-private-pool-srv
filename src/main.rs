@@ -2764,9 +2764,10 @@ async fn reporting_system(
                 match summaries_last_24_hrs {
                     Ok(summaries) => {
                         // printing report header
+                        let report_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                         let report_title = "Miner summaries for last 24 hours:";
-                        info!("{report_title}");
-                        println!("{report_title}");
+                        info!("[{report_time}] {report_title}");
+                        println!("[{report_time}] {report_title}");
                         let line_header = format!(
                             "miner_pubkey     num_of_qualified_contributions   min_diff   avg_diff   max_diff   earning_sub_total   percent"
                         );
