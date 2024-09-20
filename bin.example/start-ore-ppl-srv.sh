@@ -6,7 +6,7 @@ set -e
 
 SRV=$HOME/miner/ore-private-pool-srv/target/release/ore-ppl-srv
 
-MKP="$HOME/.config/solana/id.json"
+# MKP="$HOME/.config/solana/id.json"
 
 # default dynamic fee url. Uncomment next line if you plan to enable dynamic-fee mode
 # DYNAMIC_FEE_URL="YOUR_RPC_URL_HERE"
@@ -26,6 +26,7 @@ XTR_FEE_PCT=100
 # CMD="$HOME/miner/ore-private-pool-srv/target/release/ore-ppl-srv \
 #         --buffer-time 5 \
 #         --dynamic-fee \
+#         --send-tpu-mine-tx \
 #         --dynamic-fee-url $DYNAMIC_FEE_URL \
 #         --priority-fee 100 \
 #         --priority-fee-cap 10000 \

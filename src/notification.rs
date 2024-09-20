@@ -1,11 +1,11 @@
-use slack_messaging::Message as SlackChannelMessage;
 // use serenity::builder::ExecuteWebhook;
-use serenity::http::Http;
-use serenity::model::webhook::Webhook;
-use std::time::Duration;
-use std::{fmt, io, str::FromStr};
-use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{error, info, warn};
+use {
+    serenity::{http::Http, model::webhook::Webhook},
+    slack_messaging::Message as SlackChannelMessage,
+    std::{fmt, io, str::FromStr, time::Duration},
+    tokio::sync::mpsc::UnboundedReceiver,
+    tracing::{error, info, warn},
+};
 
 #[derive(Debug)]
 pub enum RewardsMessage {
@@ -47,9 +47,8 @@ pub(crate) async fn slack_messaging_system(
     loop {
         while let Some(slack_message) = receiver_channel.recv().await {
             match slack_message {
-                RewardsMessage::Rewards(d, r, b) => {
-                    slack_messaging(slack_webhook.clone(), SrcType::Pool, d, r, b).await
-                },
+                RewardsMessage::Rewards(d, r, b) =>
+                    slack_messaging(slack_webhook.clone(), SrcType::Pool, d, r, b).await,
             }
         }
     }
@@ -62,9 +61,8 @@ pub(crate) async fn discord_messaging_system(
     loop {
         while let Some(discord_message) = receiver_channel.recv().await {
             match discord_message {
-                RewardsMessage::Rewards(d, r, b) => {
-                    discord_messaging(discord_webhook.clone(), SrcType::Pool, d, r, b).await
-                },
+                RewardsMessage::Rewards(d, r, b) =>
+                    discord_messaging(discord_webhook.clone(), SrcType::Pool, d, r, b).await,
             }
         }
     }

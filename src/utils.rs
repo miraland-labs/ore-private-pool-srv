@@ -14,7 +14,7 @@ use {
     solana_client::nonblocking::rpc_client::RpcClient,
     solana_sdk::{clock::Clock, instruction::Instruction, pubkey::Pubkey, sysvar},
     spl_associated_token_account::get_associated_token_address,
-    std::{io::Cursor, time::Duration},
+    std::{fs, io::Cursor, time::Duration},
     tracing::{error, info},
 };
 
@@ -230,6 +230,11 @@ pub fn play_sound() {
         },
         Err(_) => print!("\x07"),
     }
+}
+
+pub fn exists_file(file_path: &str) -> bool {
+    // This function checks if a file (like db file) exists at the specified file path
+    fs::metadata(file_path).is_ok()
 }
 
 #[cached]

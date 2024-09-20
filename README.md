@@ -16,13 +16,19 @@ It's tailored by Miraland Labs as a lightweight release, **derived from and cred
 
 **No delegate.**
 
-**No database.**
+**Embedded lightweight database as an option.**
 
 **Scale from a few to tens of devices, either laptop or PC.**
 
 **Balance between worse penalties and better rewards.**
 
 **Easy setup and flexible home deployment.**
+
+## ORE Private Pool Community
+
+Private pool operators can discuss and help each other at:
+
+-   [ORE Private Pool Discord](https://discord.gg/YjQhWqxp7H)
 
 ## Install
 
@@ -52,7 +58,7 @@ If you run into issues during installation, please install the following depende
 
 ```
 sudo apt-get update
-sudo apt-get install openssl pkg-config libssl-dev
+sudo apt-get install openssl pkg-config libssl-dev gcc
 ```
 
 Notes: you may need to install dependencies to enable sound notification on ubuntu OS with:
@@ -77,6 +83,20 @@ export CPPFLAGS="-I/usr/local/opt/openssl/include"
 
 ```
 choco install openssl pkgconfiglite
+```
+
+#### rust (if not installed yet)
+
+Open a terminal window on Mac / Linux / BSD / Windows PowerShell:
+
+```
+curl https://sh.rustup.rs -sSf | sh
+```
+
+or
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 ## Build
