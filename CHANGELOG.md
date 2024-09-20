@@ -11,6 +11,15 @@ Possible log types:
 -   `[fixed]` for any bug fixes.
 -   `[security]` to invite users to upgrade in case of vulnerabilities.
 
+### v0.6.2 (2024-09-??)
+
+-   [changed] report header long column name num_of_qualified_contributions was changed to num_contributions.
+-   [changed] README.
+
+### v0.6.1 (2024-09-20)
+
+-   [changed] Deps deadpool-sqlite git repo was changed to crates.io patch miraland-deadpool-sqlite 0.8.2.
+
 ### v0.6.0 (2024-09-20)
 
 -   [added] Embedded lightweight database sqlite3 enabled by using the POWERED_BY_DBMS env variable.

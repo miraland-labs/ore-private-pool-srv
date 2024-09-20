@@ -722,7 +722,7 @@ SELECT
         ROUND(CAST(AVG(c.difficulty) AS REAL), 2)     as avg_diff,
         MAX(c.difficulty)                             as max_diff,
         SUM(e.amount)                                 as earning_sub_total,
-        ROUND(CAST(SUM(e.amount) AS REAL) / CAST(SUM(SUM(e.amount)) OVER () AS REAL) * 100, 2) || '%' AS percent
+        ROUND(CAST(SUM(e.amount) AS REAL) / CAST(SUM(SUM(e.amount)) OVER () AS REAL) * 100, 2) AS percent
     FROM
         contributions c
             INNER JOIN miners m ON c.miner_id = m.id

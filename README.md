@@ -164,6 +164,10 @@ Options:
         The extra percentage that the pool server miner feels deserves to pay more of the priority fee. As a percentage, a multiple of 50 is recommended(example: 50, means pay extra 50% of the specified priority fee), and the final priority fee cannot exceed the priority fee cap. [default: 0]
 -s, --slack-difficulty <SLACK_DIFFICULTY>
         The min difficulty that will notify slack channel(if configured) upon transaction success. [default: 25]
+  -m, --messaging-diff <MESSAGING_DIFF>
+        The min difficulty that will notify messaging channels(if configured) upon transaction success. [default: 25]
+      --send-tpu-mine-tx
+        Send and confirm transactions using tpu client.
 --no-sound-notification
         Sound notification on by default
 ```
