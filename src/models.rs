@@ -127,5 +127,5 @@ pub struct Summary {
     pub avg_diff: f64,
     pub max_diff: i16,
     pub earning_sub_total: i64,
-    pub percent: String,
+    pub percent: f64,
 }
