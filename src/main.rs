@@ -731,6 +731,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 drop(ready_clients_lock);
             };
+            debug!("clients length: {}", clients.len());
 
             if !PAUSED.load(Relaxed) && clients.len() > 0 {
                 let lock = app_proof.lock().await;
@@ -2633,8 +2634,11 @@ async fn client_message_handler_system(
                                 // calculate rewards, only diff larger than min_difficulty(rather
                                 // than MIN_DIFF) qualifies rewards calc.
                                 let mut hashpower = MIN_HASHPOWER * 2u64.pow(diff - MIN_DIFF);
-                                if hashpower > 81_920 {
-                                    hashpower = 81_920;
+                                // if hashpower > 81_920 {
+                                //     hashpower = 81_920;
+                                // }
+                                if hashpower > 655_360 {
+                                    hashpower = 655_360;
                                 }
                                 {
                                     let reader = epoch_hashes.read().await;
