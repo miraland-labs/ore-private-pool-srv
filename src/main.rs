@@ -731,7 +731,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 drop(ready_clients_lock);
             };
-            debug!("clients length: {}", clients.len());
+            // debug!("clients length: {}", clients.len());
 
             if !PAUSED.load(Relaxed) && clients.len() > 0 {
                 let lock = app_proof.lock().await;
