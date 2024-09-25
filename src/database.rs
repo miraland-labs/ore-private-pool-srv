@@ -2,17 +2,22 @@ use {
     crate::models::{self, *},
     // deadpool_sqlite::{Config, Pool, Runtime},
     // rusqlite::params,
+    // serde::Deserialize,
     std::{fmt, io, str::FromStr},
     tracing::{error, info, warn},
 };
 #[cfg(feature = "powered-by-dbms-postgres")]
 use {
-    deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime},
+    deadpool_postgres::{Client, Config, ManagerConfig, Pool, RecyclingMethod, Runtime},
+    rustls::{Certificate, ClientConfig as RustlsClientConfig},
+    std::{fs::File, io::BufReader},
     tokio_postgres::NoTls,
+    tokio_postgres_rustls::MakeRustlsConnect,
+    tracing::debug,
 };
 #[cfg(feature = "powered-by-dbms-sqlite")]
 use {
-    deadpool_sqlite::{Config, Pool, Runtime},
+    deadpool_sqlite::{Config, Connection, Pool, Runtime},
     rusqlite::params,
 };
 
@@ -67,16 +72,83 @@ pub enum DatabaseError {
     QueryFailed,
 }
 
+#[cfg(feature = "powered-by-dbms-postgres")]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct PgConfig {
+    db_ca_cert: Option<String>,
+    listen: Option<String>,
+    pg: deadpool_postgres::Config,
+}
+
+#[cfg(feature = "powered-by-dbms-postgres")]
+impl PgConfig {
+    pub fn from_env() -> Result<Self, config::ConfigError> {
+        config::Config::builder()
+            .add_source(config::Environment::default().separator("__"))
+            .build()
+            .unwrap()
+            .try_deserialize()
+    }
+}
+
 pub struct Database {
     connection_pool: Pool,
 }
 
 impl Database {
+    #[cfg(feature = "powered-by-dbms-postgres")]
+    pub fn new(database_uri: String) -> Self {
+        dotenvy::dotenv().ok();
+        let pg_config = PgConfig::from_env().unwrap();
+        debug!("pg_config settings: {:?}", pg_config);
+        // let connection_pool =
+        //     pg_config.pg.create_pool(Some(Runtime::Tokio1), tokio_postgres::NoTls).unwrap();
+
+        let connection_pool = if let Some(ca_cert) = pg_config.db_ca_cert {
+            let cert_file = File::open(ca_cert).unwrap();
+            let mut buf = BufReader::new(cert_file);
+            let mut root_store = rustls::RootCertStore::empty();
+            let certs: Vec<_> = rustls_pemfile::certs(&mut buf).collect();
+            let my_certs: Vec<_> = certs.iter().map(|c| Certificate(c.unwrap().to_vec())).collect();
+            for cert in my_certs {
+                root_store.add(&cert).unwrap();
+            }
+
+            // for cert in rustls_pemfile::certs(&mut buf) {
+            //     root_store.add(&cert.unwrap())?;
+            // }
+
+            let tls_config = RustlsClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+
+            let tls = MakeRustlsConnect::new(tls_config);
+            pg_config.pg.create_pool(Some(Runtime::Tokio1), tls)?
+        } else {
+            pg_config.pg.create_pool(Some(Runtime::Tokio1), NoTls)?
+        };
+
+        Database { connection_pool }
+    }
+
+    #[cfg(feature = "powered-by-dbms-sqlite")]
     pub fn new(database_uri: String) -> Self {
         let db_config = Config::new(database_uri);
         let connection_pool = db_config.create_pool(Runtime::Tokio1).unwrap();
 
         Database { connection_pool }
+    }
+
+    #[cfg(feature = "powered-by-dbms-postgres")]
+    pub async fn get_connection(&self) -> Result<Client, String> {
+        // let client: Client = pool.get().await?;
+        self.connection_pool.get().await.map_err(|err| err.to_string())
+    }
+
+    #[cfg(feature = "powered-by-dbms-sqlite")]
+    pub async fn get_connection(&self) -> Result<Connection, String> {
+        self.connection_pool.get().await.map_err(|err| err.to_string())
     }
 
     pub async fn get_pool_by_authority_pubkey(

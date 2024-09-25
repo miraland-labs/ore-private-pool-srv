@@ -23,7 +23,9 @@ use {
         },
         command, Parser,
     },
+    // config::ConfigError,
     database::{Database, DatabaseError, PoweredByDbms, PoweredByParams},
+    // dotenvy::dotenv,
     drillx::Solution,
     dynamic_fee as pfee,
     futures::{stream::SplitSink, SinkExt, StreamExt},
@@ -308,7 +310,7 @@ struct Args {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     static PAUSED: AtomicBool = AtomicBool::new(false);
     color_eyre::install().unwrap();
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let args = Args::parse();
 
     let filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
