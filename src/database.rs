@@ -1,9 +1,19 @@
 use {
     crate::models::{self, *},
-    deadpool_sqlite::{Config, Pool, Runtime},
-    rusqlite::params,
+    // deadpool_sqlite::{Config, Pool, Runtime},
+    // rusqlite::params,
     std::{fmt, io, str::FromStr},
     tracing::{error, info, warn},
+};
+#[cfg(feature = "powered-by-dbms-postgres")]
+use {
+    deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime},
+    tokio_postgres::NoTls,
+};
+#[cfg(feature = "powered-by-dbms-sqlite")]
+use {
+    deadpool_sqlite::{Config, Pool, Runtime},
+    rusqlite::params,
 };
 
 pub struct PoweredByParams<'p> {

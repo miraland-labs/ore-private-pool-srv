@@ -2760,7 +2760,16 @@ async fn reporting_system(
     loop {
         let current_timestamp = timer.elapsed().as_secs();
         if current_timestamp.ge(&time_to_next_reporting) {
-            if POWERED_BY_DBMS.get() == Some(&PoweredByDbms::Sqlite) {
+            // if POWERED_BY_DBMS.get() == Some(&PoweredByDbms::Sqlite) {
+            let powered_by_dbms = POWERED_BY_DBMS.get_or_init(|| {
+                let key = "POWERED_BY_DBMS";
+                match std::env::var(key) {
+                    Ok(val) => PoweredByDbms::from_str(&val)
+                        .expect("POWERED_BY_DBMS must be set correctly."),
+                    Err(_) => PoweredByDbms::Unavailable,
+                }
+            });
+            if powered_by_dbms == &PoweredByDbms::Sqlite {
                 info!("Preparing client summaries for last 24 hours.");
                 let summaries_last_24_hrs =
                     database.get_summaries_for_last_24_hours(mine_config.pool_id).await;
