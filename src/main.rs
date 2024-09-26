@@ -2107,12 +2107,12 @@ async fn ws_handler(
     let pubkey = auth_header.username();
     let signed_msg = auth_header.password();
 
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
+    let _now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs();
 
-    // Signed authentication message is only valid for 60 seconds
-    if (now - query_params.timestamp) >= 60 {
-        return Err((StatusCode::UNAUTHORIZED, "Timestamp too old."));
-    }
+    // // Signed authentication message is only valid for 60 seconds
+    // if (now - query_params.timestamp) >= 60 {
+    //     return Err((StatusCode::UNAUTHORIZED, "Timestamp too old."));
+    // }
 
     let powered_by_dbms = POWERED_BY_DBMS.get_or_init(|| {
         // let mut powered_by_dbms = PoweredByDbms::Unavailable;
