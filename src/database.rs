@@ -30,7 +30,7 @@ pub struct PoweredByParams<'p> {
     // pub connection: Option<Connection>,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PoweredByDbms {
     Mysql,
     Postgres,
@@ -147,7 +147,7 @@ impl Database {
     }
 
     #[cfg(feature = "powered-by-dbms-sqlite")]
-    pub async fn get_connection(&self) -> Result<Connection, String> {
+    pub async fn _get_connection(&self) -> Result<Connection, String> {
         self.connection_pool.get().await.map_err(|err| err.to_string())
     }
 

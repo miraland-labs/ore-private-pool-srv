@@ -3423,7 +3423,7 @@ dependencies = [
 
 [[package]]
 name = "ore-private-pool-srv"
-version = "0.6.1"
+version = "1.0.0"
 dependencies = [
  "axum",
  "axum-extra",

@@ -40,29 +40,31 @@ impl FromStr for SrcType {
     }
 }
 
-pub(crate) async fn slack_messaging_system(
+pub(crate) async fn slack_messaging_processor(
     slack_webhook: String,
     mut receiver_channel: UnboundedReceiver<RewardsMessage>,
 ) {
     loop {
         while let Some(slack_message) = receiver_channel.recv().await {
             match slack_message {
-                RewardsMessage::Rewards(d, r, b) =>
-                    slack_messaging(slack_webhook.clone(), SrcType::Pool, d, r, b).await,
+                RewardsMessage::Rewards(d, r, b) => {
+                    slack_messaging(slack_webhook.clone(), SrcType::Pool, d, r, b).await
+                },
             }
         }
     }
 }
 
-pub(crate) async fn discord_messaging_system(
+pub(crate) async fn discord_messaging_processor(
     discord_webhook: String,
     mut receiver_channel: UnboundedReceiver<RewardsMessage>,
 ) {
     loop {
         while let Some(discord_message) = receiver_channel.recv().await {
             match discord_message {
-                RewardsMessage::Rewards(d, r, b) =>
-                    discord_messaging(discord_webhook.clone(), SrcType::Pool, d, r, b).await,
+                RewardsMessage::Rewards(d, r, b) => {
+                    discord_messaging(discord_webhook.clone(), SrcType::Pool, d, r, b).await
+                },
             }
         }
     }
