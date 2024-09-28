@@ -98,13 +98,13 @@ pub async fn client_message_processor(
                         drop(lock);
                         if solution.is_valid(&challenge) {
                             let diff = solution.to_hash().difficulty();
-                            // info!(target: "server_log",
-                            //     "{} found diff: {} at {}",
-                            //     // pubkey_str,
-                            //     short_pbukey_str,
-                            //     diff,
-                            //     Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
-                            // );
+                            info!(target: "server_log",
+                                "{} found diff: {} at {}",
+                                // pubkey_str,
+                                short_pbukey_str,
+                                diff,
+                                Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+                            );
                             info!(target: "contribution_log",
                                 "{} found diff: {} at {}",
                                 // pubkey_str,
