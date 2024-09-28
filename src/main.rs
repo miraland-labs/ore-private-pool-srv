@@ -355,7 +355,8 @@ struct Args {
     pub no_sound_notification: bool,
 }
 
-#[tokio::main]
+// #[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 12)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     color_eyre::install().unwrap();
     dotenvy::dotenv().ok();

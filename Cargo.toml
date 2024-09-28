@@ -68,7 +68,8 @@ solana-sdk = "1.18.12"
 solana-transaction-status = "1.18.12"
 spl-associated-token-account = { version = "2.2", features = ["no-entrypoint"] }
 spl-token = { version = "4", features = ["no-entrypoint"] }
-tokio = { version = "1.39.2", features = ["full"] }
+# tokio = { version = "1.39.2", features = ["full"] }
+tokio = { version = "1.39.2", features = ["full", "rt-multi-thread"] }
 tower = { version = "0.4.13", features = ["util"] }
 tower-http = { version = "0.5.2", features = ["trace", "cors"] }
 tracing = "0.1.40"
