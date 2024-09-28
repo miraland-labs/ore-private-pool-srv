@@ -17,15 +17,15 @@ pub async fn proof_tracking_processor(
     proof: Arc<Mutex<Proof>>,
 ) {
     loop {
-        info!("Establishing rpc websocket connection...");
+        info!(target: "server_log", "Establishing rpc websocket connection...");
         let mut ps_client = PubsubClient::new(&ws_url).await;
 
         while ps_client.is_err() {
-            error!("Failed to connect to websocket, retrying...");
+            error!(target: "server_log", "Failed to connect to websocket, retrying...");
             ps_client = PubsubClient::new(&ws_url).await;
             tokio::time::sleep(Duration::from_millis(1000)).await;
         }
-        info!("RPC WS connection established!");
+        info!(target: "server_log", "RPC WS connection established!");
 
         let app_wallet = wallet.clone();
         if let Ok(ps_client) = ps_client {
@@ -46,14 +46,14 @@ pub async fn proof_tracking_processor(
                 )
                 .await;
 
-            info!("Subscribed notification of pool proof updates via websocket");
+            info!(target: "server_log", "Subscribed notification of pool proof updates via websocket");
             if let Ok((mut account_sub_notifications, _account_unsub)) = pubsub {
                 // MI: vanilla, by design while let will exit when None received
                 while let Some(response) = account_sub_notifications.next().await {
                     let data = response.value.data.decode();
                     if let Some(data_bytes) = data {
                         if let Ok(new_proof) = Proof::try_from_bytes(&data_bytes) {
-                            info!(
+                            info!(target: "server_log",
                                 "Received new proof with challenge: {}",
                                 BASE64_STANDARD.encode(new_proof.challenge)
                             );

@@ -100,7 +100,7 @@ impl Database {
     pub fn new(database_uri: String) -> Self {
         dotenvy::dotenv().ok();
         let pg_config = PgConfig::from_env().unwrap();
-        debug!("pg_config settings: {:?}", pg_config);
+        debug!(target: "server_log", "pg_config settings: {:?}", pg_config);
         // let connection_pool =
         //     pg_config.pg.create_pool(Some(Runtime::Tokio1), tokio_postgres::NoTls).unwrap();
 
@@ -177,16 +177,16 @@ impl Database {
                 Ok(Ok(pool)) => Ok(pool),
                 Ok(Err(e)) => match e {
                     rusqlite::Error::QueryReturnedNoRows => {
-                        warn!("Query returned no rows.");
+                        warn!(target: "server_log", "Query returned no rows.");
                         return Err(DatabaseError::QueryFailed);
                     },
                     e => {
-                        error!("Query error: {}", e);
+                        error!(target: "server_log", "Query error: {}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -216,12 +216,12 @@ impl Database {
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -254,16 +254,16 @@ impl Database {
                         if query != 1 {
                             return Err(DatabaseError::FailedToUpdateRow);
                         }
-                        info!("Successfully updated pool rewards");
+                        info!(target: "server_log", "Successfully updated pool rewards");
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -300,12 +300,12 @@ impl Database {
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -339,16 +339,16 @@ impl Database {
                 Ok(Ok(miner)) => Ok(miner),
                 Ok(Err(e)) => match e {
                     rusqlite::Error::QueryReturnedNoRows => {
-                        warn!("Query returned no rows.");
+                        warn!(target: "server_log", "Query returned no rows.");
                         return Err(DatabaseError::QueryFailed);
                     },
                     e => {
-                        error!("Query error: {}", e);
+                        error!(target: "server_log", "Query error: {}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -383,16 +383,16 @@ impl Database {
                 Ok(Ok(challenge)) => Ok(challenge),
                 Ok(Err(e)) => match e {
                     rusqlite::Error::QueryReturnedNoRows => {
-                        warn!("Query returned no rows.");
+                        warn!(target: "server_log", "Query returned no rows.");
                         return Err(DatabaseError::QueryFailed);
                     },
                     e => {
-                        error!("Query error: {}", e);
+                        error!(target: "server_log", "Query error: {}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -418,16 +418,16 @@ impl Database {
                 Ok(Ok(contribution_id)) => Ok(contribution_id),
                 Ok(Err(e)) => match e {
                     rusqlite::Error::QueryReturnedNoRows => {
-                        error!("Query returned no rows.");
+                        error!(target: "server_log", "Query returned no rows.");
                         return Err(DatabaseError::QueryFailed);
                     },
                     e => {
-                        error!("Query error: {}", e);
+                        error!(target: "server_log", "Query error: {}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -462,16 +462,16 @@ impl Database {
                         if query != 1 {
                             return Err(DatabaseError::FailedToUpdateRow);
                         }
-                        info!("Successfully updated challenge rewards");
+                        info!(target: "server_log", "Successfully updated challenge rewards");
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -503,12 +503,12 @@ impl Database {
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -541,12 +541,12 @@ impl Database {
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -595,19 +595,19 @@ impl Database {
                 // Ok(()) => Ok(()),
                 Ok(interaction) => match interaction {
                     Ok(rows) => {
-                        info!("Earnings inserted: {}", rows);
+                        info!(target: "server_log", "Earnings inserted: {}", rows);
                         if rows == 0 {
                             return Err(DatabaseError::FailedToInsertRow);
                         }
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -650,19 +650,19 @@ impl Database {
                 // Ok(()) => Ok(()),
                 Ok(interaction) => match interaction {
                     Ok(rows) => {
-                        info!("Contributions inserted: {}", rows);
+                        info!(target: "server_log", "Contributions inserted: {}", rows);
                         if rows == 0 {
                             return Err(DatabaseError::FailedToInsertRow);
                         }
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -691,16 +691,16 @@ impl Database {
                 Ok(Ok(reward)) => Ok(reward),
                 Ok(Err(e)) => match e {
                     rusqlite::Error::QueryReturnedNoRows => {
-                        error!("Query returned no rows.");
+                        error!(target: "server_log", "Query returned no rows.");
                         return Err(DatabaseError::QueryFailed);
                     },
                     e => {
-                        error!("Query error: {}", e);
+                        error!(target: "server_log", "Query error: {}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -732,12 +732,12 @@ impl Database {
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -771,19 +771,19 @@ impl Database {
                 // Ok(()) => Ok(()),
                 Ok(interaction) => match interaction {
                     Ok(rows) => {
-                        info!("Rewards updated: {}", rows);
+                        info!(target: "server_log", "Rewards updated: {}", rows);
                         if rows == 0 {
                             return Err(DatabaseError::FailedToUpdateRow);
                         }
                         return Ok(());
                     },
                     Err(e) => {
-                        error!("{:?}", e);
+                        error!(target: "server_log", "{:?}", e);
                         return Err(DatabaseError::QueryFailed);
                     },
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }
@@ -862,18 +862,18 @@ SELECT
                     [Ok(_), ..] => Ok(items.into_iter().map(|s| s.unwrap()).collect()),
                     [Err(e), ..] => match e {
                         rusqlite::Error::QueryReturnedNoRows => {
-                            warn!("Query returned no rows.");
+                            warn!(target: "server_log", "Query returned no rows.");
                             return Err(DatabaseError::QueryFailed);
                         },
                         e => {
-                            error!("Query error: {}", e);
+                            error!(target: "server_log", "Query error: {}", e);
                             return Err(DatabaseError::QueryFailed);
                         },
                     },
                     [] => todo!(),
                 },
                 Err(e) => {
-                    error!("{:?}", e);
+                    error!(target: "server_log", "{:?}", e);
                     return Err(DatabaseError::InteractionFailed);
                 },
             }

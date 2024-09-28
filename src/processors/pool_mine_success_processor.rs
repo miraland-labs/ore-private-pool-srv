@@ -127,7 +127,7 @@ pub async fn pool_mine_success_processor(
                                             .await
                                         {
                                         } else {
-                                            error!("Failed to send client text");
+                                            error!(target: "server_log", "Failed to send client text");
                                         }
                                     });
                                 },
@@ -155,7 +155,7 @@ pub async fn pool_mine_success_processor(
                                             .await
                                         {
                                         } else {
-                                            error!("Failed to send client pool submission result binary message");
+                                            error!(target: "server_log", "Failed to send client pool submission result binary message");
                                         }
                                     });
                                 },
@@ -166,30 +166,30 @@ pub async fn pool_mine_success_processor(
 
                 if i_earnings.len() > 0 {
                     if let Ok(_) = database.add_new_earnings_batch(i_earnings.clone()).await {
-                        info!("Successfully added earnings batch");
+                        info!(target: "server_log", "Successfully added earnings batch");
                     } else {
-                        error!("Failed to insert earnings batch");
+                        error!(target: "server_log", "Failed to insert earnings batch");
                     }
                 }
                 if i_rewards.len() > 0 {
                     if let Ok(_) = database.update_rewards(i_rewards).await {
-                        info!("Successfully updated rewards");
+                        info!(target: "server_log", "Successfully updated rewards");
                     } else {
-                        error!("Failed to bulk update rewards");
+                        error!(target: "server_log", "Failed to bulk update rewards");
                     }
                 }
                 if i_contributions.len() > 0 {
                     if let Ok(_) = database.add_new_contributions_batch(i_contributions).await {
-                        info!("Successfully added contributions batch");
+                        info!(target: "server_log", "Successfully added contributions batch");
                     } else {
-                        error!("Failed to insert contributions batch");
+                        error!(target: "server_log", "Failed to insert contributions batch");
                     }
                 }
                 while let Err(_) = database
                     .update_pool_rewards(app_wallet.miner_wallet.pubkey().to_string(), msg.rewards)
                     .await
                 {
-                    error!("Failed to update pool rewards! Retrying...");
+                    error!(target: "server_log", "Failed to update pool rewards! Retrying...");
                     tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
 
@@ -200,7 +200,7 @@ pub async fn pool_mine_success_processor(
                         contribution_id = cid;
                         break;
                     } else {
-                        error!("Failed to get contribution id with nonce! Retrying...");
+                        error!(target: "server_log", "Failed to get contribution id with nonce! Retrying...");
                         tokio::time::sleep(Duration::from_millis(1000)).await;
                     }
                 }
@@ -209,9 +209,9 @@ pub async fn pool_mine_success_processor(
                     .update_challenge_rewards(msg.challenge.to_vec(), contribution_id, msg.rewards)
                     .await
                 {
-                    error!("Failed to update challenge rewards! Skipping! Devs check!");
+                    error!(target: "server_log", "Failed to update challenge rewards! Skipping! Devs check!");
                     let err_str = format!("Challenge UPDATE FAILED - Challenge: {:?}\nContribution ID: {}\nRewards: {}\n", msg.challenge.to_vec(), contribution_id, msg.rewards);
-                    error!(err_str);
+                    error!(target: "server_log", err_str);
                 }
             } else {
                 // let decimals = 10f64.powf(ORE_TOKEN_DECIMALS as f64);
@@ -272,7 +272,7 @@ pub async fn pool_mine_success_processor(
                                         .await
                                     {
                                     } else {
-                                        error!("Failed to send client text");
+                                        error!(target: "server_log", "Failed to send client text");
                                     }
                                 });
                             },
@@ -298,7 +298,7 @@ pub async fn pool_mine_success_processor(
                                         .await
                                     {
                                     } else {
-                                        error!("Failed to send client pool submission result binary message");
+                                        error!(target: "server_log", "Failed to send client pool submission result binary message");
                                     }
                                 });
                             },
@@ -311,12 +311,12 @@ pub async fn pool_mine_success_processor(
                 if let Ok(balance) =
                     app_rpc_client.get_balance(&app_wallet.miner_wallet.pubkey()).await
                 {
-                    info!(
+                    info!(target: "server_log",
                         "Sol Balance(of miner wallet): {:.9}",
                         balance as f64 / LAMPORTS_PER_SOL as f64
                     );
                 } else {
-                    error!("Failed to load balance");
+                    error!(target: "server_log", "Failed to load balance");
                 }
             }
             sol_balance_checking += 1;

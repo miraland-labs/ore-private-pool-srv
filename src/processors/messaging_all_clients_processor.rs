@@ -22,7 +22,7 @@ pub async fn messaging_all_clients_processor(
                     tokio::spawn(async move {
                         if let Ok(_) = socket.socket.lock().await.send(Message::Text(text)).await {
                         } else {
-                            error!("Failed to send client text");
+                            error!(target: "server_log", "Failed to send client text");
                         }
                     });
                 }

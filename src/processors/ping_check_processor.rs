@@ -34,7 +34,7 @@ pub async fn ping_check_processor(shared_state: &Arc<RwLock<AppState>>) {
                 },
                 Ok(None) => {},
                 Err(_) => {
-                    error!("Got error sending ping to client.");
+                    error!(target: "server_log", "Got error sending ping to client.");
                 },
             }
         }

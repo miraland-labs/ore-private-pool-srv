@@ -100,14 +100,14 @@ pub async fn dynamic_fee(
         // 1) handle response
         let Ok(resp) = client.post(rpc_url).json(&body).send().await else {
             // eprintln!("didn't get dynamic fee estimate, use default instead.");
-            warn!("didn't get dynamic fee estimate, use default instead.");
+            warn!(target: "server_log", "didn't get dynamic fee estimate, use default instead.");
             return Ok(DEFAULT_PRIORITY_FEE);
         };
 
         // 2) handle json
         let Ok(response) = resp.json::<Value>().await else {
             // eprintln!("didn't get json data from fee estimate response, use default instead.");
-            warn!("didn't get json data from fee estimate response, use default instead.");
+            warn!(target: "server_log", "didn't get json data from fee estimate response, use default instead.");
             return Ok(DEFAULT_PRIORITY_FEE);
         };
 
@@ -143,7 +143,7 @@ pub async fn dynamic_fee(
                 Some(((fees.iter().sum::<u64>() as f32 / fees.len() as f32).ceil() * 1.2) as u64)
             })
             .ok_or_else(|| format!("Failed to parse priority fee response: {:?}", response)),
-        FeeStrategy::Triton =>
+        FeeStrategy::Triton => {
             serde_json::from_value::<Vec<RpcPrioritizationFee>>(response["result"].clone())
                 .map(|prioritization_fees| {
                     estimate_prioritization_fee_micro_lamports(prioritization_fees)
@@ -152,7 +152,8 @@ pub async fn dynamic_fee(
                     Err(format!(
                         "Failed to parse priority fee response: {response:?}, error: {error}"
                     ))
-                }),
+                })
+        },
         FeeStrategy::LOCAL => local_dynamic_fee(rpc_client)
             .await
             .or_else(|err| Err(format!("Failed to parse priority fee response: {err}"))),

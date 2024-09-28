@@ -67,13 +67,13 @@ pub async fn ready_clients_processor(
             };
 
             if should_mine {
-                tracing::info!("Processing {} ready clients.", clients.len());
+                tracing::info!(target: "server_log", "Processing {} ready clients.", clients.len());
                 let lock = app_proof.lock().await;
                 let proof = lock.clone();
                 drop(lock);
                 let challenge = proof.challenge;
-                info!("Mission to clients with challenge: {}", BASE64_STANDARD.encode(challenge));
-                info!("and cutoff in: {}s", cutoff);
+                info!(target: "contribution_log", "Mission to clients with challenge: {}", BASE64_STANDARD.encode(challenge));
+                info!(target: "contribution_log", "and cutoff in: {}s", cutoff);
                 for client in clients {
                     let nonce_range = {
                         let mut nonce = app_nonce.lock().await;

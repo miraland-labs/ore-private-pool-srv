@@ -83,7 +83,7 @@ pub async fn pool_submission_processor<'a>(
         if let Ok(ref mut mutex) = lock {
             old_proof = mutex.clone();
         } else {
-            warn!("app_proof.try_lock failed, will try again in a moment.");
+            warn!(target: "server_log", "app_proof.try_lock failed, will try again in a moment.");
             tokio::time::sleep(Duration::from_millis(1000)).await;
             continue;
         }
@@ -94,7 +94,7 @@ pub async fn pool_submission_processor<'a>(
         } else {
             get_cutoff(&rpc_client, old_proof, *app_buffer_time).await
         };
-        debug!("Enter new loop iteration. Let's check current cutoff value: {cutoff}");
+        debug!(target: "server_log", "Enter new loop iteration. Let's check current cutoff value: {cutoff}");
         if cutoff <= 0_i64 {
             if cutoff <= -(*app_buffer_time as i64) {
                 // buffer time elapsed, prepare to process solution
@@ -132,36 +132,36 @@ pub async fn pool_submission_processor<'a>(
                     }
 
                     // set mining pause flag before submitting best solution
-                    info!("pause new mining mission for pool submission.");
+                    info!(target: "server_log", "pause new mining mission for pool submission.");
                     PAUSED.store(true, Relaxed);
 
                     for i in 0..SUBMIT_LIMIT {
                         if let Some(best_solution) = best_solution {
                             let difficulty = best_solution.to_hash().difficulty();
 
-                            info!(
-                                    "Submitting attempt {} with ✨ diff {} ✨ of {} qualified contributions at {}.",
-                                    i + 1,
-                                    difficulty,
-                                    num_contributions,
-                                    Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
-                                );
-                            info!(
+                            info!(target: "server_log",
+                                "Submitting attempt {} with ✨ diff {} ✨ of {} qualified contributions at {}.",
+                                i + 1,
+                                difficulty,
+                                num_contributions,
+                                Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+                            );
+                            info!(target: "server_log",
                                 "Submission Challenge: {}",
                                 BASE64_STANDARD.encode(old_proof.challenge)
                             );
 
-                            info!("Getting current/latest config and proof.");
+                            info!(target: "server_log", "Getting current/latest config and proof.");
                             let ore_config = if let Ok((loaded_config, loaded_proof)) =
                                 get_config_and_proof(&rpc_client, signer.pubkey()).await
                             {
-                                info!(
+                                info!(target: "server_log",
                                     "Current/latest pool Challenge: {}",
                                     BASE64_STANDARD.encode(loaded_proof.challenge)
                                 );
 
                                 if !best_solution.is_valid(&loaded_proof.challenge) {
-                                    error!("❌ SOLUTION IS NOT VALID ANYMORE!");
+                                    error!(target: "server_log", "❌ SOLUTION IS NOT VALID ANYMORE!");
                                     // let mut lock = app_proof.lock().await;
                                     // *lock = loaded_proof;
                                     // drop(lock);
@@ -191,7 +191,7 @@ pub async fn pool_submission_processor<'a>(
                                     - current_timestamp as i64;
                                 if time_to_reset <= 5 {
                                     cu_limit = 500_000;
-                                    info!("Including reset tx.");
+                                    info!(target: "server_log", "Including reset tx.");
                                     true
                                 } else {
                                     false
@@ -249,7 +249,7 @@ pub async fn pool_submission_processor<'a>(
                                     },
                                     Err(err) => {
                                         let fee = app_priority_fee.unwrap_or(0);
-                                        info!(
+                                        info!(target: "server_log",
                                             "Error: {} Falling back to static value: {} microlamports",
                                             err, fee
                                         );
@@ -309,12 +309,12 @@ pub async fn pool_submission_processor<'a>(
 
                             // so far all ixs are constructed, next submit-and-confirm
                             if *send_tpu_mine_tx {
-                                info!("Send tpu mine tx flag is on.");
+                                info!(target: "server_log", "Send tpu mine tx flag is on.");
                                 let config = SendAndConfirmConfig {
                                     resign_txs_count: Some(5),
                                     with_spinner: true,
                                 };
-                                info!(
+                                info!(target: "server_log",
                                     "Sending tpu and confirm... with {} priority fee {}",
                                     fee_type, fee
                                 );
@@ -323,14 +323,14 @@ pub async fn pool_submission_processor<'a>(
                                 {
                                     Ok(_) => {
                                         success = true;
-                                        info!("✅ Success!!");
+                                        info!(target: "server_log", "✅ Success!!");
                                     },
                                     Err(e) => {
-                                        error!("Error occurred within tpu::send_and_confirm: {}", e)
+                                        error!(target: "server_log", "Error occurred within tpu::send_and_confirm: {}", e)
                                     },
                                 }
                             } else {
-                                info!("Send tpu mine tx flag is off. Use RPC call instead.");
+                                info!(target: "server_log", "Send tpu mine tx flag is off. Use RPC call instead.");
                                 // vanilla rpc approach
                                 let send_cfg = RpcSendTransactionConfig {
                                     skip_preflight: true,
@@ -348,11 +348,11 @@ pub async fn pool_submission_processor<'a>(
                                         Transaction::new_with_payer(&ixs, Some(&signer.pubkey()));
 
                                     tx.sign(&[&signer], hash);
-                                    info!(
+                                    info!(target: "server_log",
                                         "Sending rpc signed tx... with {} priority fee {}",
                                         fee_type, fee
                                     );
-                                    info!("attempt: {}", i + 1);
+                                    info!(target: "server_log", "attempt: {}", i + 1);
                                     match rpc_client
                                         .send_and_confirm_transaction_with_spinner_and_config(
                                             &tx,
@@ -364,8 +364,8 @@ pub async fn pool_submission_processor<'a>(
                                         Ok(sig) => {
                                             // success
                                             success = true;
-                                            info!("✅ Success!!");
-                                            info!("Sig: {}", sig);
+                                            info!(target: "server_log", "✅ Success!!");
+                                            info!(target: "server_log", "Sig: {}", sig);
 
                                             let powered_by_dbms =
                                                 POWERED_BY_DBMS.get_or_init(|| {
@@ -392,7 +392,7 @@ pub async fn pool_submission_processor<'a>(
                                                         .add_new_transaction(itxn.clone())
                                                         .await
                                                     {
-                                                        error!("Failed to add tx record to db! Retrying...");
+                                                        error!(target: "server_log", "Failed to add tx record to db! Retrying...");
                                                         tokio::time::sleep(Duration::from_millis(
                                                             1000,
                                                         ))
@@ -410,17 +410,17 @@ pub async fn pool_submission_processor<'a>(
                                                             solana_program::instruction::InstructionError::Custom(err_code) => {
                                                                 match err_code {
                                                                     e if e == OreError::NeedsReset as u32 => {
-                                                                        error!("Ore: The epoch has ended and needs reset. Retrying...");
+                                                                        error!(target: "server_log", "Ore: The epoch has ended and needs reset. Retrying...");
                                                                         continue;
                                                                     }
                                                                     e if e == OreError::HashInvalid as u32 => {
-                                                                        error!("❌ Ore: The provided hash is invalid. See you next solution.");
+                                                                        error!(target: "server_log", "❌ Ore: The provided hash is invalid. See you next solution.");
 
                                                                         // break for (0..SUBMIT_LIMIT), re-enter outer loop to restart
                                                                         break;
                                                                     }
                                                                     _ => {
-                                                                        error!("{}", &err.to_string());
+                                                                        error!(target: "server_log", "{}", &err.to_string());
                                                                         continue;
                                                                     }
                                                                 }
@@ -428,14 +428,14 @@ pub async fn pool_submission_processor<'a>(
 
                                                             // Non custom instruction error, return
                                                             _ => {
-                                                                error!("{}", &err.to_string());
+                                                                error!(target: "server_log", "{}", &err.to_string());
                                                             }
                                                         }
                                                     }
 
                                                     // MI: other error like what?
                                                     _ => {
-                                                        error!("{}", &err.to_string());
+                                                        error!(target: "server_log", "{}", &err.to_string());
                                                     }
                                                 }
                                             // TODO: is sleep here necessary?, MI
@@ -443,7 +443,7 @@ pub async fn pool_submission_processor<'a>(
                                         },
                                     }
                                 } else {
-                                    error!("Failed to get latest blockhash. retrying...");
+                                    error!(target: "server_log", "Failed to get latest blockhash. retrying...");
                                     tokio::time::sleep(Duration::from_millis(1_000)).await;
                                 }
                             } // end mine tx route
@@ -483,7 +483,7 @@ pub async fn pool_submission_processor<'a>(
                                     // limit number of checking no more than CHECK_LIMIT
                                     let mut num_checking = 0;
                                     loop {
-                                        info!("Waiting & Checking for proof challenge update");
+                                        info!(target: "server_log", "Waiting & Checking for proof challenge update");
                                         // Wait 500ms then check for updated proof
                                         tokio::time::sleep(Duration::from_millis(500)).await;
                                         let lock = app_proof.lock().await;
@@ -491,10 +491,10 @@ pub async fn pool_submission_processor<'a>(
                                         drop(lock);
 
                                         if old_proof.challenge.eq(&latest_proof.challenge) {
-                                            info!("Proof challenge not updated yet..");
+                                            info!(target: "server_log", "Proof challenge not updated yet..");
                                             num_checking += 1;
                                             if num_checking >= CHECK_LIMIT {
-                                                warn!("No challenge update detected after {CHECK_LIMIT} checkpoints. No more waiting, just keep going...");
+                                                warn!(target: "server_log", "No challenge update detected after {CHECK_LIMIT} checkpoints. No more waiting, just keep going...");
                                                 break;
                                             }
                                             // also check from rpc call along with proof
@@ -505,27 +505,27 @@ pub async fn pool_submission_processor<'a>(
                                             )
                                             .await
                                             {
-                                                info!(
+                                                info!(target: "server_log",
                                                     "OLD PROOF CHALLENGE: {}",
                                                     BASE64_STANDARD.encode(old_proof.challenge)
                                                 );
-                                                info!(
+                                                info!(target: "server_log",
                                                     "RPC PROOF CHALLENGE: {}",
                                                     BASE64_STANDARD.encode(p.challenge)
                                                 );
                                                 if old_proof.challenge.ne(&p.challenge) {
-                                                    info!("Found new proof from rpc call rather than websocket...");
+                                                    info!(target: "server_log", "Found new proof from rpc call rather than websocket...");
                                                     let mut lock = app_proof.lock().await;
                                                     *lock = p;
                                                     drop(lock);
 
-                                                    info!("Checking rewards earned.");
+                                                    info!(target: "server_log", "Checking rewards earned.");
                                                     let lock = app_proof.lock().await;
                                                     let latest_proof = lock.clone();
                                                     drop(lock);
                                                     let balance = (latest_proof.balance as f64)
                                                         / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
-                                                    info!("New balance: {}", balance);
+                                                    info!(target: "server_log", "New balance: {}", balance);
 
                                                     let multiplier =
                                                         if let Some(config) = ore_config {
@@ -539,17 +539,17 @@ pub async fn pool_submission_processor<'a>(
                                                         } else {
                                                             1.0f64
                                                         };
-                                                    info!("Multiplier: {}", multiplier);
+                                                    info!(target: "server_log", "Multiplier: {}", multiplier);
 
                                                     let rewards = (latest_proof.balance
                                                         - old_proof.balance)
                                                         as i64;
                                                     let dec_rewards = (rewards as f64)
                                                         / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
-                                                    info!("Earned: {} ORE", dec_rewards);
+                                                    info!(target: "server_log", "Earned: {} ORE", dec_rewards);
 
                                                     // reset nonce and epoch_hashes
-                                                    info!("reset nonce and epoch hashes");
+                                                    info!(target: "server_log", "reset nonce and epoch hashes");
                                                     // reset nonce
                                                     {
                                                         let mut nonce = app_nonce.lock().await;
@@ -567,7 +567,7 @@ pub async fn pool_submission_processor<'a>(
                                                     }
 
                                                     // unset mining pause flag to start new mining mission
-                                                    info!("resume new mining mission");
+                                                    info!(target: "server_log", "resume new mining mission");
                                                     PAUSED.store(false, Relaxed);
 
                                                     // Mission completed, send signal to tx sender
@@ -584,7 +584,7 @@ pub async fn pool_submission_processor<'a>(
                                                         }
                                                     });
                                                     if powered_by_dbms == &PoweredByDbms::Sqlite {
-                                                        info!("Adding new challenge record to db");
+                                                        info!(target: "server_log", "Adding new challenge record to db");
                                                         let new_challenge =
                                                             models::InsertChallenge {
                                                                 pool_id: mine_config.pool_id,
@@ -600,15 +600,15 @@ pub async fn pool_submission_processor<'a>(
                                                             )
                                                             .await
                                                         {
-                                                            error!("Failed to add new challenge record to db.");
-                                                            info!("Check if the new challenge already exists in db.");
+                                                            error!(target: "server_log", "Failed to add new challenge record to db.");
+                                                            info!(target: "server_log", "Check if the new challenge already exists in db.");
                                                             if let Ok(_) = database
                                                                 .get_challenge_by_challenge(
                                                                     new_challenge.challenge.clone(),
                                                                 )
                                                                 .await
                                                             {
-                                                                info!("Challenge already exists, continuing");
+                                                                info!(target: "server_log", "Challenge already exists, continuing");
                                                                 break;
                                                             }
 
@@ -617,16 +617,16 @@ pub async fn pool_submission_processor<'a>(
                                                             )
                                                             .await;
                                                         }
-                                                        info!("New challenge record successfully added to db");
+                                                        info!(target: "server_log", "New challenge record successfully added to db");
                                                     }
 
                                                     break;
                                                 }
                                             } else {
-                                                error!("Failed to get proof via rpc call.");
+                                                error!(target: "server_log", "Failed to get proof via rpc call.");
                                             }
                                         } else {
-                                            info!("Proof challenge updated!");
+                                            info!(target: "server_log", "Proof challenge updated!");
                                             let mut submission_challenge_id = i64::MAX;
                                             let powered_by_dbms =
                                                 POWERED_BY_DBMS.get_or_init(|| {
@@ -640,7 +640,7 @@ pub async fn pool_submission_processor<'a>(
                                                 });
                                             if powered_by_dbms == &PoweredByDbms::Sqlite {
                                                 // Fetch old proof challenge(id used later) records from db
-                                                info!("Check if old/last challenge for the pool exists in the database");
+                                                info!(target: "server_log", "Check if old/last challenge for the pool exists in the database");
                                                 let old_challenge;
                                                 loop {
                                                     if let Ok(c) = database
@@ -653,9 +653,9 @@ pub async fn pool_submission_processor<'a>(
                                                         submission_challenge_id = old_challenge.id;
                                                         break;
                                                     } else {
-                                                        warn!(
-                                                                        "Failed to get old/last challenge record from db! Inserting if necessary..."
-                                                                    );
+                                                        warn!(target: "server_log",
+                                                            "Failed to get old/last challenge record from db! Inserting if necessary..."
+                                                        );
                                                         let new_challenge =
                                                             models::InsertChallenge {
                                                                 pool_id: mine_config.pool_id,
@@ -671,15 +671,15 @@ pub async fn pool_submission_processor<'a>(
                                                             )
                                                             .await
                                                         {
-                                                            error!("Failed to add old/last challenge record to db.");
-                                                            info!("Check if the challenge already exists in db.");
+                                                            error!(target: "server_log", "Failed to add old/last challenge record to db.");
+                                                            info!(target: "server_log", "Check if the challenge already exists in db.");
                                                             if let Ok(_) = database
                                                                 .get_challenge_by_challenge(
                                                                     new_challenge.challenge.clone(),
                                                                 )
                                                                 .await
                                                             {
-                                                                info!("The challenge already exists, continuing");
+                                                                info!(target: "server_log", "The challenge already exists, continuing");
                                                                 break;
                                                             }
 
@@ -688,13 +688,13 @@ pub async fn pool_submission_processor<'a>(
                                                             )
                                                             .await;
                                                         }
-                                                        info!("Old/last challenge record successfully added to db");
+                                                        info!(target: "server_log", "Old/last challenge record successfully added to db");
                                                         // tokio::time::sleep(Duration::from_millis(1_000)).await;
                                                     }
                                                 }
 
                                                 // Add new challenge record to db
-                                                info!("Adding new challenge record to db");
+                                                info!(target: "server_log", "Adding new challenge record to db");
                                                 let new_challenge = models::InsertChallenge {
                                                     pool_id: mine_config.pool_id,
                                                     challenge: latest_proof.challenge.to_vec(),
@@ -705,19 +705,19 @@ pub async fn pool_submission_processor<'a>(
                                                     .add_new_challenge(new_challenge.clone())
                                                     .await
                                                 {
-                                                    error!(
+                                                    error!(target: "server_log",
                                                         "Failed to add new challenge record to db."
                                                     );
-                                                    info!("Check if new challenge already exists in db.");
+                                                    info!(target: "server_log", "Check if new challenge already exists in db.");
                                                     if let Ok(_) = database
                                                         .get_challenge_by_challenge(
                                                             new_challenge.challenge.clone(),
                                                         )
                                                         .await
                                                     {
-                                                        info!(
-                                                                        "Challenge already exists in db, continuing"
-                                                                    );
+                                                        info!(target: "server_log",
+                                                            "Challenge already exists in db, continuing"
+                                                        );
                                                         break;
                                                     }
 
@@ -726,18 +726,18 @@ pub async fn pool_submission_processor<'a>(
                                                     ))
                                                     .await;
                                                 }
-                                                info!(
+                                                info!(target: "server_log",
                                                     "New challenge record successfully added to db"
                                                 );
                                             }
 
-                                            info!("Checking rewards earned.");
+                                            info!(target: "server_log", "Checking rewards earned.");
                                             let lock = app_proof.lock().await;
                                             let latest_proof = lock.clone();
                                             drop(lock);
                                             let balance = (latest_proof.balance as f64)
                                                 / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
-                                            info!("New balance: {}", balance);
+                                            info!(target: "server_log", "New balance: {}", balance);
 
                                             let multiplier = if let Some(config) = ore_config {
                                                 if config.top_balance > 0 {
@@ -750,13 +750,13 @@ pub async fn pool_submission_processor<'a>(
                                             } else {
                                                 1.0f64
                                             };
-                                            info!("Multiplier: {}", multiplier);
+                                            info!(target: "server_log", "Multiplier: {}", multiplier);
 
                                             let rewards =
                                                 (latest_proof.balance - old_proof.balance) as i64;
                                             let dec_rewards = (rewards as f64)
                                                 / 10f64.powf(ORE_TOKEN_DECIMALS as f64);
-                                            info!("Earned: {} ORE", dec_rewards);
+                                            info!(target: "server_log", "Earned: {} ORE", dec_rewards);
 
                                             let contributions = {
                                                 app_epoch_hashes.read().await.contributions.clone()
@@ -789,7 +789,7 @@ pub async fn pool_submission_processor<'a>(
                                                 drop(mut_proof);
                                             }
                                             // reset nonce and epoch_hashes
-                                            info!("reset nonce and epoch hashes");
+                                            info!(target: "server_log", "reset nonce and epoch hashes");
 
                                             // reset nonce
                                             {
@@ -806,12 +806,12 @@ pub async fn pool_submission_processor<'a>(
                                                 mut_epoch_hashes.contributions = HashMap::new();
                                             }
                                             // unset mining pause flag to start new mining mission
-                                            info!("resume new mining mission");
+                                            info!(target: "server_log", "resume new mining mission");
                                             PAUSED.store(false, Relaxed);
 
                                             // Mission completed, send signal to tx sender
                                             if let Err(_) = mission_completed_sender.send(0) {
-                                                error!("The mission completed receiver dropped.");
+                                                error!(target: "server_log", "The mission completed receiver dropped.");
                                             }
 
                                             // last one, notify slack and other messaging channels if necessary
@@ -855,26 +855,26 @@ pub async fn pool_submission_processor<'a>(
                                     // all tx related activities have succeeded, exit tx submit loop
                                     break;
                                 } else {
-                                    error!("Oops! The mission completed sender dropped.");
-                                    warn!("The laned tx attender task may fail since no mission completion message received.");
+                                    error!(target: "server_log", "Oops! The mission completed sender dropped.");
+                                    warn!(target: "server_log", "The laned tx attender task may fail since no mission completion message received.");
                                     break;
                                 }
                             }
                         } else {
-                            error!("Solution is_some but got none on best hash re-check?");
+                            error!(target: "server_log", "Solution is_some but got none on best hash re-check?");
                             tokio::time::sleep(Duration::from_millis(1_000)).await;
                         }
                     }
                     if !success {
-                        error!("❌ Failed to land tx... either reached {SUBMIT_LIMIT} attempts or ix error or invalid solution.");
-                        info!("Discarding and refreshing data...");
-                        info!("refresh proof");
+                        error!(target: "server_log", "❌ Failed to land tx... either reached {SUBMIT_LIMIT} attempts or ix error or invalid solution.");
+                        info!(target: "server_log", "Discarding and refreshing data...");
+                        info!(target: "server_log", "refresh proof");
                         if let Ok(refreshed_proof) = get_proof(&rpc_client, wallet_pubkey).await {
                             let mut app_proof = app_proof.lock().await;
                             *app_proof = refreshed_proof;
                             drop(app_proof);
                         }
-                        info!("reset nonce and epoch hashes");
+                        info!(target: "server_log", "reset nonce and epoch hashes");
                         // reset nonce
                         {
                             let mut nonce = app_nonce.lock().await;
@@ -889,7 +889,7 @@ pub async fn pool_submission_processor<'a>(
                         }
 
                         // unset mining pause flag to start new mining mission
-                        info!("resume new mining mission");
+                        info!(target: "server_log", "resume new mining mission");
                         PAUSED.store(false, Relaxed);
                     }
                     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -897,14 +897,14 @@ pub async fn pool_submission_processor<'a>(
                     // solution is None
                     // solution_is_none_counter += 1;
                     if solution_is_none_counter % NO_BEST_SOLUTION_INTERVAL == 0 {
-                        info!("No best solution yet.");
+                        info!(target: "server_log", "No best solution yet.");
                     }
                     solution_is_none_counter += 1;
                     tokio::time::sleep(Duration::from_millis(1_000)).await;
                 }
             } else {
                 // Fall in buffer time window
-                debug!(
+                debug!(target: "server_log",
                     "Enter buffer time window that spans {} seconds. Standby!",
                     *app_buffer_time
                 );
@@ -915,7 +915,7 @@ pub async fn pool_submission_processor<'a>(
             // reset none solution counter
             solution_is_none_counter = 0;
 
-            info!("Time to cutoff: {}s. Sleep...", cutoff);
+            info!(target: "server_log", "Time to cutoff: {}s. Sleep...", cutoff);
 
             tokio::time::sleep(Duration::from_secs(cutoff as u64)).await;
         };

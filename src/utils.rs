@@ -52,8 +52,8 @@ pub async fn _get_config(client: &RpcClient) -> Result<ore_api::state::Config, S
             },
             Err(e) => {
                 // return Err("Failed to get config account".to_string());
-                error!("Failed to get config account: {:?}", e);
-                info!("Retry to get config account...");
+                error!(target: "server_log", "Failed to get config account: {:?}", e);
+                info!(target: "server_log", "Retry to get config account...");
             },
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -173,8 +173,8 @@ pub async fn get_proof(client: &RpcClient, authority: Pubkey) -> Result<Proof, S
             },
             Err(e) => {
                 // return Err("Failed to get proof account".to_string()),
-                error!("Failed to get proof account: {:?}", e);
-                info!("Retry to get proof account...");
+                error!(target: "server_log", "Failed to get proof account: {:?}", e);
+                info!(target: "server_log", "Retry to get proof account...");
             },
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -190,8 +190,8 @@ pub async fn get_clock(client: &RpcClient) -> Clock {
                 break;
             },
             Err(e) => {
-                error!("get clock account error: {:?}", e);
-                info!("retry to get clock account...");
+                error!(target: "server_log", "get clock account error: {:?}", e);
+                info!(target: "server_log", "retry to get clock account...");
             },
         }
         tokio::time::sleep(Duration::from_millis(100)).await;

@@ -14,7 +14,7 @@ use tokio::{
     sync::{mpsc::UnboundedReceiver, Mutex, RwLock},
     time::Instant,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::{
     AppState, ClientMessage, EpochHashes, InternalMessageContribution, LastPong, MIN_DIFF,
@@ -42,13 +42,13 @@ pub async fn client_message_processor(
                 ClientMessage::Ready(addr) => {
                     let ready_clients = ready_clients.clone();
                     tokio::spawn(async move {
-                        // info!("Client {} is ready!", addr.to_string());
+                        // info!(target: "server_log", "Client {} is ready!", addr.to_string());
                         let mut ready_clients = ready_clients.lock().await;
                         ready_clients.insert(addr);
                     });
                 },
                 ClientMessage::Mining(addr) => {
-                    info!("Client {} has started mining!", addr.to_string());
+                    info!(target: "server_log", "Client {} has started mining!", addr.to_string());
                 },
                 ClientMessage::BestSolution(addr, solution, pubkey) => {
                     let app_epoch_hashes = epoch_hashes.clone();
@@ -70,7 +70,7 @@ pub async fn client_message_processor(
                             if let Some(nr) = reader.get(&pubkey) {
                                 nr.clone()
                             } else {
-                                error!("Client nonce range not set!");
+                                error!(target: "server_log", "Client nonce range not set!");
                                 return;
                             }
                         };
@@ -79,7 +79,7 @@ pub async fn client_message_processor(
                         let nonce = u64::from_le_bytes(solution.n);
 
                         if !nonce_range.contains(&nonce) {
-                            error!("❌ Client submitted nonce out of assigned range");
+                            error!(target: "server_log", "❌ Client submitted nonce out of assigned range");
                             return;
                         }
 
@@ -88,7 +88,7 @@ pub async fn client_message_processor(
                         if let Some(app_client_socket) = reader.sockets.get(&addr) {
                             miner_id = app_client_socket.miner_id;
                         } else {
-                            error!("Failed to get client socket for addr: {}", addr);
+                            error!(target: "server_log", "Failed to get client socket for addr: {}", addr);
                             return;
                         }
                         drop(reader);
@@ -98,7 +98,14 @@ pub async fn client_message_processor(
                         drop(lock);
                         if solution.is_valid(&challenge) {
                             let diff = solution.to_hash().difficulty();
-                            info!(
+                            // info!(target: "server_log",
+                            //     "{} found diff: {} at {}",
+                            //     // pubkey_str,
+                            //     short_pbukey_str,
+                            //     diff,
+                            //     Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+                            // );
+                            info!(target: "contribution_log",
                                 "{} found diff: {} at {}",
                                 // pubkey_str,
                                 short_pbukey_str,
@@ -134,13 +141,14 @@ pub async fn client_message_processor(
                                                 },
                                             );
                                             if diff > epoch_hashes.best_hash.difficulty {
-                                                debug!("New best diff: {}", diff);
+                                                info!(target: "server_log", "New best diff: {}", diff);
+                                                info!(target: "contribution_log", "New best diff: {}", diff);
                                                 epoch_hashes.best_hash.difficulty = diff;
                                                 epoch_hashes.best_hash.solution = Some(solution);
                                             }
                                             drop(epoch_hashes);
                                         } else {
-                                            info!("Miner submitted lower diff than a previous contribution, discarding lower diff");
+                                            info!(target: "server_log", "Miner submitted lower diff than a previous contribution, discarding lower diff");
                                         }
                                     } else {
                                         let mut epoch_hashes = epoch_hashes.write().await;
@@ -154,7 +162,8 @@ pub async fn client_message_processor(
                                             },
                                         );
                                         if diff > epoch_hashes.best_hash.difficulty {
-                                            debug!("New best diff: {}", diff);
+                                            info!(target: "server_log", "New best diff: {}", diff);
+                                            info!(target: "contribution_log", "New best diff: {}", diff);
                                             epoch_hashes.best_hash.difficulty = diff;
                                             epoch_hashes.best_hash.solution = Some(solution);
                                         }
@@ -163,10 +172,10 @@ pub async fn client_message_processor(
                                 }
                                 // tokio::time::sleep(Duration::from_millis(100)).await;
                             } else {
-                                warn!("Diff too low, skipping");
+                                warn!(target: "server_log", "Diff too low, skipping");
                             }
                         } else {
-                            error!(
+                            error!(target: "server_log",
                                 "{} returned an invalid solution for latest challenge!",
                                 // pubkey
                                 short_pbukey_str
@@ -176,7 +185,7 @@ pub async fn client_message_processor(
                             if let Some(app_client_socket) = reader.sockets.get(&addr) {
                                 let _ = app_client_socket.socket.lock().await.send(Message::Text("Invalid solution. If this keeps happening, please contact support.".to_string())).await;
                             } else {
-                                error!("Failed to get client socket for addr: {}", addr);
+                                error!(target: "server_log", "Failed to get client socket for addr: {}", addr);
                                 return;
                             }
                             drop(reader);

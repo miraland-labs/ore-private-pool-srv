@@ -71,6 +71,7 @@ use {
         trace::{DefaultMakeSpan, TraceLayer},
     },
     tracing::{debug, error, info, warn},
+    tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer},
     utils::{get_proof, get_register_ix, proof_pubkey, ORE_TOKEN_DECIMALS},
 };
 
@@ -119,7 +120,7 @@ fn get_messaging_flags() -> MessagingFlags {
                     SLACK_WEBHOOK = val;
                 },
                 Err(e) => {
-                    warn!("couldn't interpret {key}: {e}. slack messaging service unvailable.")
+                    warn!(target: "server_log", "couldn't interpret {key}: {e}. slack messaging service unvailable.")
                 },
             }
 
@@ -132,7 +133,7 @@ fn get_messaging_flags() -> MessagingFlags {
                     DISCORD_WEBHOOK = val;
                 },
                 Err(e) => {
-                    warn!("couldn't interpret {key}: {e}. discord messaging service unvailable.")
+                    warn!(target: "server_log", "couldn't interpret {key}: {e}. discord messaging service unvailable.")
                 },
             }
 
@@ -356,7 +357,6 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // static PAUSED: AtomicBool = AtomicBool::new(false);
     color_eyre::install().unwrap();
     dotenvy::dotenv().ok();
     let args = Args::parse();
@@ -365,9 +365,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
         .unwrap();
 
-    let file_appender = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    tracing_subscriber::fmt().with_env_filter(filter_layer).with_writer(non_blocking).init();
+    let server_logs = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
+    let (server_logs, _guard) = tracing_appender::non_blocking(server_logs);
+    let server_log_layer = tracing_subscriber::fmt::layer().with_writer(server_logs).with_filter(
+        tracing_subscriber::filter::filter_fn(|metadata| metadata.target() == "server_log"),
+    );
+
+    let contribution_logs = tracing_appender::rolling::daily("./logs", "ore-ppl-contributions.log");
+    let (contribution_logs, _guard) = tracing_appender::non_blocking(contribution_logs);
+    let contribution_log_layer = tracing_subscriber::fmt::layer()
+        .with_writer(contribution_logs)
+        .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+            metadata.target() == "contribution_log"
+        }));
+
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(server_log_layer)
+        .with(contribution_log_layer)
+        .init();
+
+    // let file_appender = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
+    // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    // tracing_subscriber::fmt().with_env_filter(filter_layer).with_writer(non_blocking).init();
 
     // load envs
     let wallet_path_str = std::env::var("WALLET_PATH").expect("WALLET_PATH must be set.");
@@ -375,7 +395,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fee_wallet_path_str = match std::env::var(key) {
         Ok(val) => val,
         Err(_) => {
-            info!("FEE_WALLET_PATH not set, using WALLET_PATH instead.");
+            info!(target: "server_log", "FEE_WALLET_PATH not set, using WALLET_PATH instead.");
             wallet_path_str.clone()
         },
     };
@@ -415,15 +435,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if powered_by_dbms == &PoweredByDbms::Sqlite {
-        info!("Powered by {} detected.", powered_by_dbms);
+        info!(target: "server_log", "Powered by {} detected.", powered_by_dbms);
         // First, let's check if db file exist or not
         if !utils::exists_file(&dbms_settings.database_uri) {
-            warn!(
+            warn!(target: "server_log",
                 "No existing database! New database will be created in the path: {}",
                 dbms_settings.database_uri
             );
         } else {
-            info!(
+            info!(target: "server_log",
                 "The ore private pool db is already in place: {}. Opening...",
                 dbms_settings.database_uri
             );
@@ -433,24 +453,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let conn = match Connection::open(dbms_settings.database_uri) {
             Ok(conn) => conn,
             Err(e) => {
-                error!("Error connecting to database: {}.", e);
+                error!(target: "server_log", "Error connecting to database: {}.", e);
                 return Err("Failed to connect to database.".into());
             },
         };
 
         // initialization check
         if !dbms_settings.initialized {
-            info!("Initializing database...");
+            info!(target: "server_log", "Initializing database...");
             // execute db init sql scripts
             // let command = fs::read_to_string("migrations/sqlite/init.sql").unwrap();
             let command = include_str!("../migrations/sqlite/init.sql");
             // conn.execute_batch(&command).unwrap();
             if let Err(e) = conn.execute_batch(&command) {
-                error!("Error occurred during db initialization: {}", e);
+                error!(target: "server_log", "Error occurred during db initialization: {}", e);
                 return Err("Failed during db initialization.".into());
             }
             dbms_settings.initialized = true;
-            info!("Initialization completed.");
+            info!(target: "server_log", "Initialization completed.");
         }
 
         // retrive initialization completed flag
@@ -460,7 +480,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // db file corruption check
         if dbms_settings.corrupted {
-            error!("ore private pool db file corrupted.");
+            error!(target: "server_log", "ore private pool db file corrupted.");
             return Err("ore private pool db file corrupted.".into());
         }
     }
@@ -493,40 +513,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wallet_path = Path::new(&wallet_path_str);
 
     if !wallet_path.exists() {
-        tracing::error!("❌ Failed to load wallet at: {}", wallet_path_str);
+        tracing::error!(target: "server_log", "❌ Failed to load wallet at: {}", wallet_path_str);
         return Err("Failed to find wallet path.".into());
     }
 
     let wallet = read_keypair_file(wallet_path)
         .expect("Failed to load keypair from file: {wallet_path_str}");
     let wallet_pubkey = wallet.pubkey();
-    info!("loaded wallet {}", wallet_pubkey.to_string());
+    info!(target: "server_log", "loaded wallet {}", wallet_pubkey.to_string());
 
     // load fee wallet
     let wallet_path = Path::new(&fee_wallet_path_str);
 
     if !wallet_path.exists() {
-        tracing::error!("❌ Failed to load fee wallet at: {}", fee_wallet_path_str);
+        tracing::error!(target: "server_log", "❌ Failed to load fee wallet at: {}", fee_wallet_path_str);
         return Err("Failed to find fee wallet path.".into());
     }
 
     let fee_wallet = read_keypair_file(wallet_path)
         .expect("Failed to load keypair from file: {wallet_path_str}");
-    info!("loaded fee wallet {}", wallet.pubkey().to_string());
+    info!(target: "server_log", "loaded fee wallet {}", wallet.pubkey().to_string());
 
     WALLET_PUBKEY.get_or_init(|| wallet_pubkey);
 
-    info!("establishing rpc connection...");
+    info!(target: "server_log", "establishing rpc connection...");
     let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
 
-    info!("loading sol balance...");
+    info!(target: "server_log", "loading sol balance...");
     let balance = if let Ok(balance) = rpc_client.get_balance(&wallet_pubkey).await {
         balance
     } else {
         return Err("Failed to load balance".into());
     };
 
-    info!("Balance: {:.9}", balance as f64 / LAMPORTS_PER_SOL as f64);
+    info!(target: "server_log", "Balance: {:.9}", balance as f64 / LAMPORTS_PER_SOL as f64);
 
     if balance < 1_000_000 {
         return Err("Sol balance is too low!".into());
@@ -534,13 +554,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // MI
     let proof_pubkey = proof_pubkey(wallet_pubkey);
-    debug!("PROOF ADDRESS: {:?}", proof_pubkey);
+    debug!(target: "server_log", "PROOF ADDRESS: {:?}", proof_pubkey);
     let proof = if let Ok(loaded_proof) = get_proof(&rpc_client, wallet_pubkey).await {
-        debug!("LOADED PROOF: \n{:?}", loaded_proof);
+        debug!(target: "server_log", "LOADED PROOF: \n{:?}", loaded_proof);
         loaded_proof
     } else {
-        error!("Failed to load proof.");
-        info!("Creating proof account...");
+        error!(target: "server_log", "Failed to load proof.");
+        info!(target: "server_log", "Creating proof account...");
 
         let ix = get_register_ix(wallet_pubkey);
 
@@ -559,7 +579,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await;
 
             if let Ok(sig) = result {
-                info!("Sig: {}", sig.to_string());
+                info!(target: "server_log", "Sig: {}", sig.to_string());
             } else {
                 return Err("Failed to create proof account".into());
             }
@@ -574,7 +594,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mine_config: Arc<MineConfig>;
     if powered_by_dbms == &PoweredByDbms::Sqlite {
-        info!("Check if the mining pool record exists in the database");
+        info!(target: "server_log", "Check if the mining pool record exists in the database");
         let mining_pool = database.get_pool_by_authority_pubkey(wallet_pubkey.to_string()).await;
 
         match mining_pool {
@@ -583,7 +603,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 panic!("Failed to get a connection from database pool");
             },
             Err(_) => {
-                info!("Mining pool record missing from database. Inserting...");
+                info!(target: "server_log", "Mining pool record missing from database. Inserting...");
                 let proof_pubkey = utils::proof_pubkey(wallet_pubkey);
                 let result = database
                     .add_new_pool(wallet_pubkey.to_string(), proof_pubkey.to_string())
@@ -592,17 +612,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if result.is_err() {
                     panic!("Failed to add mining pool record in database");
                 } else {
-                    info!("Mining pool record added to database");
+                    info!(target: "server_log", "Mining pool record added to database");
                 }
             },
         }
-        // info!("Mining pool record added to database");
+        // info!(target: "server_log", "Mining pool record added to database");
         let mining_pool =
             database.get_pool_by_authority_pubkey(wallet_pubkey.to_string()).await.unwrap();
 
         mine_config = Arc::new(MineConfig { pool_id: mining_pool.id });
 
-        info!("Check if current challenge for the pool exists in the database");
+        info!(target: "server_log", "Check if current challenge for the pool exists in the database");
         let challenge = database.get_challenge_by_challenge(proof.challenge.to_vec()).await;
 
         match challenge {
@@ -611,7 +631,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 panic!("Failed to get a connection from database pool");
             },
             Err(_) => {
-                info!("Challenge record missing from database. Inserting...");
+                info!(target: "server_log", "Challenge record missing from database. Inserting...");
                 let new_challenge = models::InsertChallenge {
                     pool_id: mining_pool.id,
                     challenge: proof.challenge.to_vec(),
@@ -622,7 +642,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if result.is_err() {
                     panic!("Failed to add challenge record in database");
                 } else {
-                    info!("Challenge record added to database");
+                    info!(target: "server_log", "Challenge record added to database");
                 }
             },
         }
@@ -860,7 +880,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
-    tracing::info!("listening on {}", listener.local_addr().unwrap());
+    tracing::info!(target: "server_log", "listening on {}", listener.local_addr().unwrap());
 
     let app_shared_state = shared_state.clone();
     tokio::spawn(async move {
@@ -950,7 +970,7 @@ async fn ws_handler(
     // verify client
     if let Ok(user_pubkey) = Pubkey::from_str(pubkey) {
         if powered_by_dbms == &PoweredByDbms::Sqlite {
-            info!("Check if the miner record exists in the database");
+            info!(target: "server_log", "Check if the miner record exists in the database");
             let db_miner = database.get_miner_by_pubkey_str(pubkey.to_string()).await;
 
             let miner;
@@ -971,7 +991,7 @@ async fn ws_handler(
                 //     ));
                 // },
                 Err(DatabaseError::QueryFailed) | Err(DatabaseError::InteractionFailed) => {
-                    info!("Miner pubkey record missing from database. Inserting...");
+                    info!(target: "server_log", "Miner pubkey record missing from database. Inserting...");
                     let add_miner_result = database
                         .add_new_miner(user_pubkey.to_string(), true, "Enrolled".to_string())
                         .await;
@@ -992,7 +1012,7 @@ async fn ws_handler(
                             pool = db_pool;
                         },
                         Err(DatabaseError::QueryFailed) | Err(DatabaseError::InteractionFailed) => {
-                            info!("Pool record missing from database. Inserting...");
+                            info!(target: "server_log", "Pool record missing from database. Inserting...");
                             add_pool_result = database
                                 .add_new_pool(
                                     wallet_pubkey.to_string(),
@@ -1005,14 +1025,14 @@ async fn ws_handler(
                                 .unwrap();
                         },
                         Err(DatabaseError::FailedToGetConnectionFromPool) => {
-                            error!("Failed to get database pool connection.");
+                            error!(target: "server_log", "Failed to get database pool connection.");
                             return Err((
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Internal Server Error",
                             ));
                         },
                         Err(_) => {
-                            error!("DB Error: Catch all.");
+                            error!(target: "server_log", "DB Error: Catch all.");
                             return Err((
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Internal Server Error",
@@ -1025,17 +1045,17 @@ async fn ws_handler(
                         let result = database.add_new_reward(new_reward).await;
 
                         if result.is_ok() {
-                            info!("Miner and rewards tracker added to database");
+                            info!(target: "server_log", "Miner and rewards tracker added to database");
                         } else {
-                            error!("Failed to add miner rewards tracker to database");
+                            error!(target: "server_log", "Failed to add miner rewards tracker to database");
                             return Err((
                                 StatusCode::UNAUTHORIZED,
                                 "Failed to add miner rewards tracker to database",
                             ));
                         }
-                        info!("Miner record added to database");
+                        info!(target: "server_log", "Miner record added to database");
                     } else {
-                        error!("Failed to add miner record to database");
+                        error!(target: "server_log", "Failed to add miner record to database");
                         return Err((
                             StatusCode::UNAUTHORIZED,
                             "Failed to add miner record to database",
@@ -1043,11 +1063,11 @@ async fn ws_handler(
                     }
                 },
                 Err(DatabaseError::FailedToGetConnectionFromPool) => {
-                    error!("Failed to get database pool connection.");
+                    error!(target: "server_log", "Failed to get database pool connection.");
                     return Err((StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"));
                 },
                 Err(_) => {
-                    error!("DB Error: Catch all.");
+                    error!(target: "server_log", "DB Error: Catch all.");
                     return Err((StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"));
                 },
             }
@@ -1060,7 +1080,7 @@ async fn ws_handler(
                 let ts_msg = msg_timestamp.to_le_bytes();
 
                 if signature.verify(&user_pubkey.to_bytes(), &ts_msg) {
-                    info!("Client: {addr} connected with pubkey {pubkey}.");
+                    info!(target: "server_log", "Client: {addr} connected with pubkey {pubkey}.");
                     return Ok(ws.on_upgrade(move |socket| {
                         handle_socket(
                             socket,
@@ -1099,7 +1119,7 @@ async fn ws_handler(
                 let ts_msg = msg_timestamp.to_le_bytes();
 
                 if signature.verify(&user_pubkey.to_bytes(), &ts_msg) {
-                    info!("Client: {addr} connected with pubkey {pubkey}.");
+                    info!(target: "server_log", "Client: {addr} connected with pubkey {pubkey}.");
                     return Ok(ws.on_upgrade(move |socket| {
                         handle_socket(
                             socket,
@@ -1156,7 +1176,7 @@ async fn ws_handler_v1(
     // verify client
     if let Ok(user_pubkey) = Pubkey::from_str(pubkey) {
         if powered_by_dbms == &PoweredByDbms::Sqlite {
-            info!("Check if the miner record exists in the database");
+            info!(target: "server_log", "Check if the miner record exists in the database");
             let db_miner = database.get_miner_by_pubkey_str(pubkey.to_string()).await;
 
             let miner;
@@ -1165,7 +1185,7 @@ async fn ws_handler_v1(
                     miner = db_miner;
                 },
                 Err(DatabaseError::QueryFailed) | Err(DatabaseError::InteractionFailed) => {
-                    info!("Miner pubkey record missing from database. Inserting...");
+                    info!(target: "server_log", "Miner pubkey record missing from database. Inserting...");
                     let add_miner_result = database
                         .add_new_miner(user_pubkey.to_string(), true, "Enrolled".to_string())
                         .await;
@@ -1184,7 +1204,7 @@ async fn ws_handler_v1(
                             pool = db_pool;
                         },
                         Err(DatabaseError::QueryFailed) | Err(DatabaseError::InteractionFailed) => {
-                            info!("Pool record missing from database. Inserting...");
+                            info!(target: "server_log", "Pool record missing from database. Inserting...");
                             add_pool_result = database
                                 .add_new_pool(
                                     wallet_pubkey.to_string(),
@@ -1197,14 +1217,14 @@ async fn ws_handler_v1(
                                 .unwrap();
                         },
                         Err(DatabaseError::FailedToGetConnectionFromPool) => {
-                            error!("Failed to get database pool connection.");
+                            error!(target: "server_log", "Failed to get database pool connection.");
                             return Err((
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Internal Server Error",
                             ));
                         },
                         Err(_) => {
-                            error!("DB Error: Catch all.");
+                            error!(target: "server_log", "DB Error: Catch all.");
                             return Err((
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Internal Server Error",
@@ -1217,17 +1237,17 @@ async fn ws_handler_v1(
                         let result = database.add_new_reward(new_reward).await;
 
                         if result.is_ok() {
-                            info!("Miner and rewards tracker added to database");
+                            info!(target: "server_log", "Miner and rewards tracker added to database");
                         } else {
-                            error!("Failed to add miner rewards tracker to database");
+                            error!(target: "server_log", "Failed to add miner rewards tracker to database");
                             return Err((
                                 StatusCode::UNAUTHORIZED,
                                 "Failed to add miner rewards tracker to database",
                             ));
                         }
-                        info!("Miner record added to database");
+                        info!(target: "server_log", "Miner record added to database");
                     } else {
-                        error!("Failed to add miner record to database");
+                        error!(target: "server_log", "Failed to add miner record to database");
                         return Err((
                             StatusCode::UNAUTHORIZED,
                             "Failed to add miner record to database",
@@ -1235,11 +1255,11 @@ async fn ws_handler_v1(
                     }
                 },
                 Err(DatabaseError::FailedToGetConnectionFromPool) => {
-                    error!("Failed to get database pool connection.");
+                    error!(target: "server_log", "Failed to get database pool connection.");
                     return Err((StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"));
                 },
                 Err(_) => {
-                    error!("DB Error: Catch all.");
+                    error!(target: "server_log", "DB Error: Catch all.");
                     return Err((StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"));
                 },
             }
@@ -1252,7 +1272,7 @@ async fn ws_handler_v1(
                 let ts_msg = msg_timestamp.to_le_bytes();
 
                 if signature.verify(&user_pubkey.to_bytes(), &ts_msg) {
-                    info!("Client: {addr} connected with pubkey {pubkey}.");
+                    info!(target: "server_log", "Client: {addr} connected with pubkey {pubkey}.");
                     return Ok(ws.on_upgrade(move |socket| {
                         handle_socket(
                             socket,
@@ -1291,7 +1311,7 @@ async fn ws_handler_v1(
                 let ts_msg = msg_timestamp.to_le_bytes();
 
                 if signature.verify(&user_pubkey.to_bytes(), &ts_msg) {
-                    info!("Client: {addr} connected with pubkey {pubkey}.");
+                    info!(target: "server_log", "Client: {addr} connected with pubkey {pubkey}.");
                     return Ok(ws.on_upgrade(move |socket| {
                         handle_socket(
                             socket,
@@ -1326,9 +1346,9 @@ async fn handle_socket(
     client_channel: UnboundedSender<ClientMessage>,
 ) {
     if socket.send(axum::extract::ws::Message::Ping(vec![1, 2, 3])).await.is_ok() {
-        tracing::debug!("Pinged {who}... pubkey: {who_pubkey}");
+        debug!(target: "server_log", "Pinged {who}... pubkey: {who_pubkey}");
     } else {
-        error!("could not ping {who} pubkey: {who_pubkey}");
+        error!(target: "server_log", "could not ping {who} pubkey: {who_pubkey}");
 
         // if we can't ping we can't do anything, return to close the connection
         return;
@@ -1337,7 +1357,7 @@ async fn handle_socket(
     let (sender, mut receiver) = socket.split();
     let mut app_state = rw_app_state.write().await;
     if app_state.sockets.contains_key(&who) {
-        info!("Socket addr: {who} already has an active connection");
+        info!(target: "server_log", "Socket addr: {who} already has an active connection");
         return;
     } else {
         let new_client_connection = ClientConnection {
@@ -1373,7 +1393,7 @@ async fn handle_socket(
     app_state.sockets.remove(&who);
     drop(app_state);
 
-    info!("Client: {} disconnected!", who_pubkey.to_string());
+    info!(target: "server_log", "Client: {} disconnected!", who_pubkey.to_string());
 }
 
 fn process_message(
@@ -1383,7 +1403,7 @@ fn process_message(
 ) -> ControlFlow<(), ()> {
     match msg {
         Message::Text(_t) => {
-            // info!(">>> {who} sent str: {t:?}");
+            // info!(target: "server_log", ">>> {who} sent str: {t:?}");
         },
         Message::Binary(d) => {
             // first 8 bytes are message type
@@ -1436,25 +1456,25 @@ fn process_message(
                                 let msg = ClientMessage::BestSolution(who, solution, pubkey);
                                 let _ = client_channel.send(msg);
                             } else {
-                                error!("Client contribution sig verification failed.");
+                                error!(target: "server_log", "Client contribution sig verification failed.");
                             }
                         } else {
-                            error!("Failed to parse into Signature.");
+                            error!(target: "server_log", "Failed to parse into Signature.");
                         }
                     } else {
-                        error!("Failed to parse signed message from client.");
+                        error!(target: "server_log", "Failed to parse signed message from client.");
                     }
                 },
                 _ => {
-                    error!(">>> {} sent an invalid message", who);
+                    error!(target: "server_log", ">>> {} sent an invalid message", who);
                 },
             }
         },
         Message::Close(c) => {
             if let Some(cf) = c {
-                info!(">>> {} sent close with code {} and reason `{}`", who, cf.code, cf.reason);
+                info!(target: "server_log", ">>> {} sent close with code {} and reason `{}`", who, cf.code, cf.reason);
             } else {
-                info!(">>> {who} somehow sent close message without CloseFrame");
+                info!(target: "server_log", ">>> {who} somehow sent close message without CloseFrame");
             }
             return ControlFlow::Break(());
         },
@@ -1463,7 +1483,7 @@ fn process_message(
             let _ = client_channel.send(msg);
         },
         Message::Ping(_v) => {
-            //info!(">>> {who} sent ping with {v:?}");
+            //info!(target: "server_log", ">>> {who} sent ping with {v:?}");
         },
     }
 
@@ -1490,7 +1510,7 @@ async fn reporting_processor(
                 }
             });
             if powered_by_dbms == &PoweredByDbms::Sqlite {
-                info!("Preparing client summaries for last 24 hours.");
+                info!(target: "server_log", "Preparing client summaries for last 24 hours.");
                 let summaries_last_24_hrs =
                     database.get_summaries_for_last_24_hours(mine_config.pool_id).await;
 
@@ -1499,12 +1519,12 @@ async fn reporting_processor(
                         // printing report header
                         let report_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                         let report_title = "Miner summaries for last 24 hours:";
-                        info!("[{report_time}] {report_title}");
+                        info!(target: "server_log", "[{report_time}] {report_title}");
                         println!("[{report_time}] {report_title}");
                         let line_header = format!(
                             "miner_pubkey     num_contributions   min_diff   avg_diff   max_diff   earning_sub_total   percent"
                         );
-                        info!("{line_header}");
+                        info!(target: "server_log", "{line_header}");
                         println!("{line_header}");
 
                         let decimals = 10f64.powf(ORE_TOKEN_DECIMALS as f64);
@@ -1525,18 +1545,18 @@ async fn reporting_processor(
                                 summary.percent
                             );
 
-                            info!("{line}");
+                            info!(target: "server_log", "{line}");
                             println!("{line}");
                         }
                     },
                     Err(e) => {
-                        error!("Failed to prepare summary report: {e:?}");
+                        error!(target: "server_log", "Failed to prepare summary report: {e:?}");
                     },
                 }
                 time_to_next_reporting = interval_in_hrs * 3600; // in seconds
                 timer = Instant::now();
             } else {
-                warn!("Reporting system cannot be used when POWERED_BY_DBMS disabled. Exiting reporting system.");
+                warn!(target: "server_log", "Reporting system cannot be used when POWERED_BY_DBMS disabled. Exiting reporting system.");
                 return;
             }
         } else {
