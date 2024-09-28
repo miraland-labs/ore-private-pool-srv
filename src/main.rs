@@ -71,7 +71,7 @@ use {
         trace::{DefaultMakeSpan, TraceLayer},
     },
     tracing::{debug, error, info, warn},
-    tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer},
+    tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer},
     utils::{get_proof, get_register_ix, proof_pubkey, ORE_TOKEN_DECIMALS},
 };
 
@@ -380,6 +380,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }));
 
     tracing_subscriber::registry()
+        .with(fmt::layer())
         .with(filter_layer)
         .with(server_log_layer)
         .with(contribution_log_layer)
