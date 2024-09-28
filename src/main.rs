@@ -1521,12 +1521,12 @@ async fn reporting_processor(
                         let report_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                         let report_title = "Miner summaries for last 24 hours:";
                         info!(target: "server_log", "[{report_time}] {report_title}");
-                        println!("[{report_time}] {report_title}");
+                        // println!("[{report_time}] {report_title}");
                         let line_header = format!(
                             "miner_pubkey     num_contributions   min_diff   avg_diff   max_diff   earning_sub_total   percent"
                         );
                         info!(target: "server_log", "{line_header}");
-                        println!("{line_header}");
+                        // println!("{line_header}");
 
                         let decimals = 10f64.powf(ORE_TOKEN_DECIMALS as f64);
                         for summary in summaries {
@@ -1547,7 +1547,7 @@ async fn reporting_processor(
                             );
 
                             info!(target: "server_log", "{line}");
-                            println!("{line}");
+                            // println!("{line}");
                         }
                     },
                     Err(e) => {
