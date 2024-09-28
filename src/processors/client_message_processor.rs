@@ -162,7 +162,7 @@ pub async fn client_message_processor(
                                             },
                                         );
                                         if diff > epoch_hashes.best_hash.difficulty {
-                                            info!(target: "server_log", "New best diff: {}", diff);
+                                            // info!(target: "server_log", "New best diff: {}", diff);
                                             info!(target: "contribution_log", "New best diff: {}", diff);
                                             epoch_hashes.best_hash.difficulty = diff;
                                             epoch_hashes.best_hash.solution = Some(solution);
