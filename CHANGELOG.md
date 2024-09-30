@@ -11,9 +11,12 @@ Possible log types:
 -   `[fixed]` for any bug fixes.
 -   `[security]` to invite users to upgrade in case of vulnerabilities.
 
-### v0.6.2 (2024-09-??)
+### v1.0.0 (2024-09-30)
 
--   [changed] report header long column name num_of_qualified_contributions was changed to num_contributions.
+-   [added] contribution log.
+-   [added] stdout-log tracing layer.
+-   [changed] refactor processors mod.
+-   [changed] support client version V0 and V1.
 -   [changed] README.
 
 ### v0.6.1 (2024-09-20)
