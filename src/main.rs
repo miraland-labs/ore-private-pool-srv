@@ -366,10 +366,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     // MI: complete layer definition
-    let stdout_log_layer =
-        tracing_subscriber::fmt::layer().compact().pretty().with_filter(env_filter).with_filter(
-            tracing_subscriber::filter::filter_fn(|metadata| metadata.target() == "server_log"),
-        );
+    let stdout_log_layer = tracing_subscriber::fmt::layer()
+        .compact()
+        // .pretty()
+        .with_filter(env_filter)
+        .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+            metadata.target() == "server_log"
+        }));
 
     // MI: complete layer definition
     let server_logs = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
