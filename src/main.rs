@@ -67,7 +67,7 @@ use {
         trace::{DefaultMakeSpan, TraceLayer},
     },
     tracing::{debug, error, info, warn},
-    tracing_subscriber::{filter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer},
+    tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer},
     utils::{get_proof, get_register_ix, proof_pubkey},
 };
 
@@ -357,14 +357,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     let args = Args::parse();
 
+    // let env_filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
+    //     .or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
+    //     .unwrap();
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
         .unwrap();
 
-    let stdout_log_layer = tracing_subscriber::fmt::layer()
-        // .pretty()
-        .with_filter(env_filter)
-        .with_filter(filter::filter_fn(|metadata| metadata.target().starts_with("server_log")));
+    let stdout_log_layer =
+        tracing_subscriber::fmt::layer().pretty().with_filter(env_filter).with_filter(
+            tracing_subscriber::filter::filter_fn(|metadata| metadata.target() == "server_log"),
+        );
 
     let server_logs = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
     let (server_logs, _guard) = tracing_appender::non_blocking(server_logs);
