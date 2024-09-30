@@ -14,7 +14,6 @@ path = "src/main.rs"
 
 [features]
 default = ["powered-by-dbms-sqlite"]
-# default = ["powered-by-dbms-postgres"]
 powered-by-dbms-postgres = [
     "dep:deadpool-postgres",
     "dep:tokio-postgres",
