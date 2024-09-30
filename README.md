@@ -32,6 +32,8 @@ Private pool operators can discuss and help each other at:
 
 ## Install
 
+ORE Private Pool installation consists of 2 parts: server and clients. One server will serve multiple clients. The following is for server installation (ore-private-pool-srv). To install clients, please refer to [client installation(ore-private-pool-cli)](https://crates.io/crates/ore-private-pool-cli).
+
 To install the private pool server, 2 approaches are recommended:
 
 **Approach One**: install from crates.io directly, use [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
@@ -129,7 +131,7 @@ bin/start-ore-ppl-srv.sh
 or
 
 ```
-RUST_LOG=none,ore_ppl_srv=info bin/start-ore-ppl-srv.sh
+RUST_LOG=info bin/start-ore-ppl-srv.sh
 ```
 
 you will find daily log file in `logs` sub directory.

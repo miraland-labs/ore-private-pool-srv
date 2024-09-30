@@ -82,7 +82,7 @@ pub async fn send_and_confirm(
 
     if !transaction_errors.is_empty() {
         for transaction_error in &transaction_errors {
-            error!("Transaction Err: {:?}", transaction_error);
+            error!(target: "server_log", "Transaction Err: {:?}", transaction_error);
         }
         return Err(format!("{} write transactions failed", transaction_errors.len()).into());
     }

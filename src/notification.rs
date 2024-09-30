@@ -40,29 +40,31 @@ impl FromStr for SrcType {
     }
 }
 
-pub(crate) async fn slack_messaging_system(
+pub(crate) async fn slack_messaging_processor(
     slack_webhook: String,
     mut receiver_channel: UnboundedReceiver<RewardsMessage>,
 ) {
     loop {
         while let Some(slack_message) = receiver_channel.recv().await {
             match slack_message {
-                RewardsMessage::Rewards(d, r, b) =>
-                    slack_messaging(slack_webhook.clone(), SrcType::Pool, d, r, b).await,
+                RewardsMessage::Rewards(d, r, b) => {
+                    slack_messaging(slack_webhook.clone(), SrcType::Pool, d, r, b).await
+                },
             }
         }
     }
 }
 
-pub(crate) async fn discord_messaging_system(
+pub(crate) async fn discord_messaging_processor(
     discord_webhook: String,
     mut receiver_channel: UnboundedReceiver<RewardsMessage>,
 ) {
     loop {
         while let Some(discord_message) = receiver_channel.recv().await {
             match discord_message {
-                RewardsMessage::Rewards(d, r, b) =>
-                    discord_messaging(discord_webhook.clone(), SrcType::Pool, d, r, b).await,
+                RewardsMessage::Rewards(d, r, b) => {
+                    discord_messaging(discord_webhook.clone(), SrcType::Pool, d, r, b).await
+                },
             }
         }
     }
@@ -84,15 +86,15 @@ async fn slack_messaging(
     loop {
         if let Err(err) = req.try_clone().unwrap().send().await {
             // eprintln!("{}", err);
-            // error!("{}", err);
-            error!("Err sending slack webhook: {:?}", err);
+            // error!(target: "server_log", "{}", err);
+            error!(target: "server_log", "Err sending slack webhook: {:?}", err);
             if num_retries < 3 {
-                info!("retry...");
+                info!(target: "server_log", "retry...");
                 num_retries += 1;
                 tokio::time::sleep(Duration::from_millis(1_000)).await;
                 continue;
             } else {
-                warn!("Failed 3 attempts to send message to slack. No more retry.");
+                warn!(target: "server_log", "Failed 3 attempts to send message to slack. No more retry.");
             }
         }
         break;
@@ -123,14 +125,14 @@ async fn discord_messaging(
             discord_webhook.execute(&http, false, |w| w.content(&text).username("Mirabot")).await
         {
             // eprintln!("{}", err);
-            error!("Err sending discord webhook: {:?}", err);
+            error!(target: "server_log", "Err sending discord webhook: {:?}", err);
             if num_retries < 3 {
-                info!("retry...");
+                info!(target: "server_log", "retry...");
                 num_retries += 1;
                 tokio::time::sleep(Duration::from_millis(1_000)).await;
                 continue;
             } else {
-                warn!("Failed 3 attempts to send message to discord. No more retry.");
+                warn!(target: "server_log", "Failed 3 attempts to send message to discord. No more retry.");
             }
         }
         break;
