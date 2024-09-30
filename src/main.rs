@@ -362,7 +362,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     let stdout_log_layer = tracing_subscriber::fmt::layer()
-        .pretty()
+        // .pretty()
         .with_filter(env_filter)
         .with_filter(filter::filter_fn(|metadata| metadata.target().starts_with("server_log")));
 
