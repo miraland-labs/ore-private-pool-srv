@@ -15,7 +15,6 @@ use {
     axum_extra::{headers::authorization::Basic, TypedHeader},
     base64::{prelude::BASE64_STANDARD, Engine},
     bitflags::bitflags,
-    chrono::Local,
     clap::{
         builder::{
             styling::{AnsiColor, Effects},
@@ -23,9 +22,7 @@ use {
         },
         command, Parser,
     },
-    // config::ConfigError,
     database::{Database, DatabaseError, PoweredByDbms, PoweredByParams},
-    // dotenvy::dotenv,
     drillx::Solution,
     dynamic_fee as pfee,
     futures::{stream::SplitSink, StreamExt},
@@ -39,7 +36,7 @@ use {
         pool_mine_success_processor::pool_mine_success_processor,
         pool_submission_processor::pool_submission_processor,
         proof_tracking_processor::proof_tracking_processor,
-        ready_clients_processor::ready_clients_processor,
+        ready_clients_processor::ready_clients_processor, reporting_processor::reporting_processor,
     },
     rusqlite::Connection,
     serde::Deserialize,
@@ -54,13 +51,12 @@ use {
     },
     std::{
         collections::{HashMap, HashSet},
-        // fs,
         net::SocketAddr,
-        ops::{ControlFlow, Div},
+        ops::ControlFlow,
         path::Path,
         str::FromStr,
         sync::{atomic::AtomicBool, Arc, Once, OnceLock},
-        time::{Duration, SystemTime, UNIX_EPOCH},
+        time::{SystemTime, UNIX_EPOCH},
     },
     tokio::{
         sync::{mpsc::UnboundedSender, Mutex, RwLock},
@@ -72,7 +68,7 @@ use {
     },
     tracing::{debug, error, info, warn},
     tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Layer},
-    utils::{get_proof, get_register_ix, proof_pubkey, ORE_TOKEN_DECIMALS},
+    utils::{get_proof, get_register_ix, proof_pubkey},
 };
 
 mod database;
@@ -165,7 +161,6 @@ struct ClientConnection {
     socket: Arc<Mutex<SplitSink<WebSocket, Message>>>,
 }
 
-// #[derive(Clone)]
 struct WalletExtension {
     miner_wallet: Arc<Keypair>,
     #[allow(dead_code)]
@@ -1490,84 +1485,6 @@ fn process_message(
     }
 
     ControlFlow::Continue(())
-}
-
-async fn reporting_processor(
-    interval_in_hrs: u64,
-    mine_config: Arc<MineConfig>,
-    database: Arc<Database>,
-) {
-    // initial report starts in 5 mins(300s)
-    let mut time_to_next_reporting: u64 = 300;
-    let mut timer = Instant::now();
-    loop {
-        let current_timestamp = timer.elapsed().as_secs();
-        if current_timestamp.ge(&time_to_next_reporting) {
-            let powered_by_dbms = POWERED_BY_DBMS.get_or_init(|| {
-                let key = "POWERED_BY_DBMS";
-                match std::env::var(key) {
-                    Ok(val) => PoweredByDbms::from_str(&val)
-                        .expect("POWERED_BY_DBMS must be set correctly."),
-                    Err(_) => PoweredByDbms::Unavailable,
-                }
-            });
-            if powered_by_dbms == &PoweredByDbms::Sqlite {
-                info!(target: "server_log", "Preparing client summaries for last 24 hours.");
-                let summaries_last_24_hrs =
-                    database.get_summaries_for_last_24_hours(mine_config.pool_id).await;
-
-                match summaries_last_24_hrs {
-                    Ok(summaries) => {
-                        // printing report header
-                        let report_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-                        let report_title = "Miner summaries for last 24 hours:";
-                        info!(target: "server_log", "[{report_time}] {report_title}");
-                        // println!("[{report_time}] {report_title}");
-                        let line_header = format!(
-                            "miner_pubkey     num_contributions   min_diff   avg_diff   max_diff   earning_sub_total   percent"
-                        );
-                        info!(target: "server_log", "{line_header}");
-                        // println!("{line_header}");
-
-                        let decimals = 10f64.powf(ORE_TOKEN_DECIMALS as f64);
-                        for summary in summaries {
-                            let mp = summary.miner_pubkey;
-                            let len = mp.len();
-                            let short_mp = format!("{}...{}", &mp[0..6], &mp[len - 4..len]);
-                            let earned_rewards_dec =
-                                (summary.earning_sub_total as f64).div(decimals);
-                            let line = format!(
-                                "{}    {:17}   {:8}   {:8}   {:8}       {:.11}   {:>6.2}%",
-                                short_mp,
-                                summary.num_of_contributions,
-                                summary.min_diff,
-                                summary.avg_diff,
-                                summary.max_diff,
-                                earned_rewards_dec,
-                                summary.percent
-                            );
-
-                            info!(target: "server_log", "{line}");
-                            // println!("{line}");
-                        }
-                    },
-                    Err(e) => {
-                        error!(target: "server_log", "Failed to prepare summary report: {e:?}");
-                    },
-                }
-                time_to_next_reporting = interval_in_hrs * 3600; // in seconds
-                timer = Instant::now();
-            } else {
-                warn!(target: "server_log", "Reporting system cannot be used when POWERED_BY_DBMS disabled. Exiting reporting system.");
-                return;
-            }
-        } else {
-            tokio::time::sleep(Duration::from_secs(
-                time_to_next_reporting.saturating_sub(current_timestamp),
-            ))
-            .await;
-        }
-    }
 }
 
 fn styles() -> Styles {

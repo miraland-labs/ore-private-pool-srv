@@ -6,3 +6,4 @@ pub mod pool_mine_success_processor;
 pub mod pool_submission_processor;
 pub mod proof_tracking_processor;
 pub mod ready_clients_processor;
+pub mod reporting_processor;
