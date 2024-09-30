@@ -361,10 +361,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
         .unwrap();
 
-    let stdout_log_layer =
-        tracing_subscriber::fmt::layer().pretty().with_filter(env_filter).with_filter(
-            filter::filter_fn(|metadata| !metadata.target().starts_with("contribution_log")),
-        );
+    let stdout_log_layer = tracing_subscriber::fmt::layer()
+        .pretty()
+        .with_filter(env_filter)
+        .with_filter(filter::filter_fn(|metadata| metadata.target().starts_with("server_log")));
 
     let server_logs = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
     let (server_logs, _guard) = tracing_appender::non_blocking(server_logs);
