@@ -134,7 +134,7 @@ or
 RUST_LOG=info bin/start-ore-ppl-srv.sh
 ```
 
-you will find daily log file in `logs` sub directory.
+There are 2 types of daily log files in the `logs' subdirectory. One type is server_log with the filename pattern ore-ppl-srv.log.yyyy-mm-dd, the other type is contribution_log with the filename pattern ore-ppl-contributions.log.yyyy-mm-dd. By default, the server log with filtered content is redirected to standard output or the terminal.
 
 ## Help
 
