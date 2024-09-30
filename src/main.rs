@@ -384,7 +384,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }));
 
     tracing_subscriber::registry()
-        .with(fmt::layer())
+        // .with(fmt::layer())
         .with(stdout_log_layer)
         .with(server_log_layer)
         .with(contribution_log_layer)
