@@ -70,7 +70,9 @@ pub async fn ready_clients_processor(
                 let proof = lock.clone();
                 drop(lock);
                 let challenge = proof.challenge;
+                info!(target: "server_log", "Mission to clients with challenge: {}", BASE64_STANDARD.encode(challenge));
                 info!(target: "contribution_log", "Mission to clients with challenge: {}", BASE64_STANDARD.encode(challenge));
+                info!(target: "server_log", "and cutoff in: {}s", cutoff);
                 info!(target: "contribution_log", "and cutoff in: {}s", cutoff);
                 for client in clients {
                     let nonce_range = {
@@ -110,7 +112,7 @@ pub async fn ready_clients_processor(
                                 .insert(sender.pubkey, nonce_range);
                         });
                     } else {
-                        error!("Mission cannot be delivered to client {} because the client no longer exists in the sockets map.", client);
+                        error!(target: "server_log", "Mission cannot be delivered to client {} because the client no longer exists in the sockets map.", client);
                     }
                     // remove ready client from list
                     let _ = ready_clients.lock().await.remove(&client);
