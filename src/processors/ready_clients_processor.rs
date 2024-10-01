@@ -13,7 +13,7 @@ use ore_api::state::Proof;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use tokio::sync::{Mutex, RwLock};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     message::ServerMessageStartMining,
@@ -54,9 +54,7 @@ pub async fn ready_clients_processor(
             };
             let mut should_mine = true;
 
-            // only distribute challenge if 10 seconds or more is left
-            // or if there is no best_hash yet
-            let cutoff = if cutoff <= 10 {
+            let cutoff = if cutoff <= 0 {
                 let solution = epoch_hashes.read().await.best_hash.solution;
                 if solution.is_some() {
                     should_mine = false;
@@ -111,6 +109,8 @@ pub async fn ready_clients_processor(
                                 .await
                                 .insert(sender.pubkey, nonce_range);
                         });
+                    } else {
+                        error!("Mission cannot be delivered to client {} because the client no longer exists in the sockets map.", client);
                     }
                     // remove ready client from list
                     let _ = ready_clients.lock().await.remove(&client);
