@@ -196,7 +196,7 @@ pub async fn client_message_processor(
         } else {
             // receiver_channel got None, the stream ended.
             // None is returned when all Sender halves have dropped, indicating that no further values can be sent on the channel.
-            error!("All client message senders have been dropped. No more client messages will be received. Exit the loop.");
+            error!(target: "server_log", "All client message senders have been dropped. No more client messages will be received. Exit the loop.");
             break; // exit outer loop
         }
     }
