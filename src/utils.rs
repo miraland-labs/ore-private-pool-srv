@@ -194,7 +194,7 @@ pub async fn get_clock(client: &RpcClient) -> Clock {
                 info!(target: "server_log", "retry to get clock account...");
             },
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
     bincode::deserialize::<Clock>(&data).expect("Failed to deserialize clock")

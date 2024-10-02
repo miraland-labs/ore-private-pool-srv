@@ -33,7 +33,7 @@ cached = "0.46.1"
 chrono = "0.4.38"
 clap = { version = "4.5.14", features = ["derive"] }
 color-eyre = { version = "0.6" }
-crossbeam-channel = "0.5.13"
+# crossbeam-channel = "0.5.13"
 # deadpool = "0.12.1"                                             # MI, optional
 # deadpool-sqlite = { git = "https://github.com/bikeshedder/deadpool.git", rev = "e6de358" }
 deadpool-sqlite = { package = "miraland-deadpool-sqlite", version = "0.8.2", optional = true }
