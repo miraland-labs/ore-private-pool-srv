@@ -42,9 +42,10 @@ pub async fn client_message_processor(
                 ClientMessage::Ready(addr) => {
                     let ready_clients = ready_clients.clone();
                     tokio::spawn(async move {
-                        // info!(target: "server_log", "Client {} is ready!", addr.to_string());
+                        info!(target: "server_log", "Client {} is ready for mission!", addr.to_string());
                         let mut ready_clients = ready_clients.lock().await;
                         ready_clients.insert(addr);
+                        drop(ready_clients); // MI
                     });
                 },
                 ClientMessage::Mining(addr) => {
