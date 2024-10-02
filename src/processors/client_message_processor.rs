@@ -100,14 +100,16 @@ pub async fn client_message_processor(
                         if solution.is_valid(&challenge) {
                             let diff = solution.to_hash().difficulty();
                             info!(target: "server_log",
-                                "{} found diff: {} at {}",
+                                "Client {} with pubkey {} found diff: {} at {}",
+                                addr.to_string(),
                                 // pubkey_str,
                                 short_pbukey_str,
                                 diff,
                                 Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
                             );
                             info!(target: "contribution_log",
-                                "{} found diff: {} at {}",
+                                "Client {} with pubkey {} found diff: {} at {}",
+                                addr.to_string(),
                                 // pubkey_str,
                                 short_pbukey_str,
                                 diff,
