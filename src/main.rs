@@ -1394,21 +1394,26 @@ async fn handle_socket(
     drop(app_state);
 
     let _ = tokio::spawn(async move {
-        // MI: vanilla. by design while let will exit when None received
-        while let Some(Ok(msg)) = receiver.next().await {
-            if process_message(msg, who, client_channel.clone()).is_break() {
+        // // MI: vanilla. by design while let will exit when None received
+        // while let Some(Ok(msg)) = receiver.next().await {
+        //     if process_message(msg, who, client_channel.clone()).is_break() {
+        //         break;
+        //     }
+        // }
+
+        // MI: use loop for else processing, since by design while let will exit when None received
+        loop {
+            if let Some(Ok(msg)) = receiver.next().await {
+                if process_message(msg, who, client_channel.clone()).is_break() {
+                    break;
+                }
+            } else {
+                // receiver got None, the stream ended.
+                // None is returned when the sender half has dropped, indicating that no further values can be received.
+                error!(target: "server_log", "The sender half of websocket has been dropped. No more messages will be received from {who}. Exit the loop.");
                 break;
             }
         }
-
-        // // MI: use loop, since by design while let will exit when None received
-        // loop {
-        //     if let Some(Ok(msg)) = receiver.next().await {
-        //         if process_message(msg, who, client_channel.clone()).is_break() {
-        //             break;
-        //         }
-        //     }
-        // }
     })
     .await;
 
