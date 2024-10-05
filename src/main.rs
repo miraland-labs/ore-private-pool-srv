@@ -1410,7 +1410,7 @@ async fn handle_socket(
             } else {
                 // receiver got None, the stream ended.
                 // None is returned when the sender half has dropped, indicating that no further values can be received.
-                error!(target: "server_log", "The sender half of websocket has been dropped. No more messages will be received from {who}. Exit the loop.");
+                warn!(target: "server_log", "The sender half of websocket has been dropped. No more messages will be received from {who}. Exit the loop.");
                 break;
             }
         }
