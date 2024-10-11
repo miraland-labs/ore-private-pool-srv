@@ -159,6 +159,7 @@ async fn _find_bus(rpc_client: &RpcClient) -> Pubkey {
 }
 
 pub async fn get_proof(client: &RpcClient, authority: Pubkey) -> Result<Proof, String> {
+    let mut retries = 0;
     loop {
         let proof_address = proof_pubkey(authority);
         let data = client.get_account_data(&proof_address).await;
@@ -172,7 +173,10 @@ pub async fn get_proof(client: &RpcClient, authority: Pubkey) -> Result<Proof, S
                 }
             },
             Err(e) => {
-                // return Err("Failed to get proof account".to_string()),
+                if retries >= 4 {
+                    return Err("Failed 5 attempts to get proof account. The proof account has not been created yet.".to_string());
+                }
+                retries += 1;
                 error!(target: "server_log", "Failed to get proof account: {:?}", e);
                 info!(target: "server_log", "Retry to get proof account...");
             },
