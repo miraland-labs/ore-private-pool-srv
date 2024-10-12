@@ -11,6 +11,12 @@ Possible log types:
 -   `[fixed]` for any bug fixes.
 -   `[security]` to invite users to upgrade in case of vulnerabilities.
 
+### v1.0.1 (2024-10-12)
+
+-   [fixed] infinite get_proof Err loop if a wallet has never mined before
+-   [changed] replace some while-let with loop control.
+-   [changed] log infos.
+
 ### v1.0.0 (2024-09-30)
 
 -   [added] contribution log.
