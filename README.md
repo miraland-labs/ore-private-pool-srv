@@ -128,11 +128,13 @@ duplicate `bin.example` directory and rename to `bin`, modify settings in `start
 bin/start-ore-ppl-srv.sh
 ```
 
-or
+or, with log filter specified as follows:
 
 ```
 RUST_LOG=info bin/start-ore-ppl-srv.sh
 ```
+
+if you only want to output a log with the level warn or error, you can replace `info` with `warn` or `error`. By default(without specifying RUST_LOG), your standard output(terminal) will display a log with level `info`, and the log files will be written with level `trace`.
 
 There are 2 types of daily log files in the `logs' subdirectory. One type is server_log with the filename pattern ore-ppl-srv.log.yyyy-mm-dd, the other type is contribution_log with the filename pattern ore-ppl-contributions.log.yyyy-mm-dd. By default, the server log with filtered content is redirected to standard output or the terminal.
 

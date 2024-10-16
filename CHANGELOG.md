@@ -11,6 +11,11 @@ Possible log types:
 -   `[fixed]` for any bug fixes.
 -   `[security]` to invite users to upgrade in case of vulnerabilities.
 
+### v1.0.2 (2024-10-16)
+
+-   [changed] Control log writing behavior with log level: info, warn, error, etc.
+-   [changed] README.
+
 ### v1.0.1 (2024-10-12)
 
 -   [fixed] infinite get_proof Err loop if a wallet has never mined before

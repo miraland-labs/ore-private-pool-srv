@@ -361,7 +361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let env_filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
     //     .or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
     //     .unwrap();
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+    let env_filter_stdout = tracing_subscriber::EnvFilter::try_from_default_env()
         .or_else(|_| tracing_subscriber::EnvFilter::try_new("info"))
         .unwrap();
 
@@ -369,23 +369,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stdout_log_layer = tracing_subscriber::fmt::layer()
         .compact()
         // .pretty()
-        .with_filter(env_filter)
+        .with_filter(env_filter_stdout)
         .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
             metadata.target() == "server_log"
         }));
 
+    let env_filter_srvlog = tracing_subscriber::EnvFilter::try_from_default_env()
+        .or_else(|_| tracing_subscriber::EnvFilter::try_new("trace"))
+        .unwrap();
+
     // MI: complete layer definition
     let server_logs = tracing_appender::rolling::daily("./logs", "ore-ppl-srv.log");
     let (server_logs, _guard) = tracing_appender::non_blocking(server_logs);
-    let server_log_layer = tracing_subscriber::fmt::layer().with_writer(server_logs).with_filter(
-        tracing_subscriber::filter::filter_fn(|metadata| metadata.target() == "server_log"),
-    );
+    let server_log_layer = tracing_subscriber::fmt::layer()
+        .with_writer(server_logs)
+        .with_filter(env_filter_srvlog)
+        .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+            metadata.target() == "server_log"
+        }));
 
+    let env_filter_conlog = tracing_subscriber::EnvFilter::try_from_default_env()
+        .or_else(|_| tracing_subscriber::EnvFilter::try_new("trace"))
+        .unwrap();
     // MI: complete layer definition
     let contribution_logs = tracing_appender::rolling::daily("./logs", "ore-ppl-contributions.log");
     let (contribution_logs, _guard) = tracing_appender::non_blocking(contribution_logs);
     let contribution_log_layer = tracing_subscriber::fmt::layer()
         .with_writer(contribution_logs)
+        .with_filter(env_filter_conlog)
         .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
             metadata.target() == "contribution_log"
         }));
