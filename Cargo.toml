@@ -1,6 +1,6 @@
 [package]
 name = "ore-private-pool-srv"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "A lightweight release of Ore mining private pool server. derived from and credited to ore-hq-server."
